@@ -1,0 +1,19 @@
+[project]
+name = "roro-yield"
+version = "0.1.0"
+description = "Ro-Ro deck stowage & dynamic yield optimizer"
+requires-python = ">=3.11"
+dependencies = [
+    "streamlit>=1.38",
+    "pulp>=2.8",
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "plotly>=5.22",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
