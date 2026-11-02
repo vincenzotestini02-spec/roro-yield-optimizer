@@ -82,7 +82,7 @@ What it changes: the pseudo-revenue objective is replaced by real commercial mar
 Requires Python 3.11+.
 
 ```bash
-git clone https://github.com/vincenzotestini02/roro-yield-optimizer.git
+git clone https://github.com/vincenzotestini02-spec/roro-yield-optimizer.git
 cd roro-yield-optimizer
 python -m venv .venv
 .venv\Scripts\activate          # Windows  (macOS/Linux: source .venv/bin/activate)
