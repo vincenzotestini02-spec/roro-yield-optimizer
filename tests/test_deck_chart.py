@@ -31,7 +31,8 @@ def test_hover_traces_have_one_point_per_unit_and_a_legend():
     s = generate_scenario(ScenarioParams(seed=4))
     plan = solve_fcfs(s)
     fig = deck_figure(s, plan)
-    assert sum(len(t.x) for t in fig.data) == len(plan.accepted_ids)
+    assert sum(len(t.x) for t in fig.data if t.hovertext is not None) == len(plan.accepted_ids)
+    assert {t.name for t in fig.data if t.showlegend is not False} == {"Contract", "Spot"}
     assert {t.name for t in fig.data} <= {"Contract", "Spot"}
 
 

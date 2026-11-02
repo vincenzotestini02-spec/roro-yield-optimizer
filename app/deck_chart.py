@@ -41,7 +41,7 @@ def deck_figure(scenario: Scenario, plan: Plan, title: str = "") -> go.Figure:
         cursor[lane_id] = x0 + b.effective_length(gap)
         y = y_of[lane_id]
         shapes.append(dict(
-            type="rect", name=f"unit:{b.id}@{lane_id}",
+            type="rect", name=f"unit:{b.id}@{lane_id}", layer="below",
             x0=x0, x1=x1, y0=y - UNIT_HEIGHT / 2, y1=y + UNIT_HEIGHT / 2,
             fillcolor=SEGMENT_COLORS[b.segment], line=dict(width=0),
         ))
@@ -58,11 +58,15 @@ def deck_figure(scenario: Scenario, plan: Plan, title: str = "") -> go.Figure:
     for seg, h in hover.items():
         if not h["x"]:
             continue
+        # Invisible markers carry the hover text and reefer labels; the legend gets a solid swatch.
         fig.add_trace(go.Scatter(
-            x=h["x"], y=h["y"], mode="markers+text", name=SEGMENT_NAMES[seg],
-            text=h["label"], textfont=dict(color="white", size=12), hovertext=h["text"], hoverinfo="text",
-            marker=dict(size=14, color=SEGMENT_COLORS[seg], opacity=0, symbol="square"),
-            showlegend=True,
+            x=h["x"], y=h["y"], mode="markers+text", name=SEGMENT_NAMES[seg], legendgroup=seg,
+            text=h["label"], textfont=dict(color="white", size=13), hovertext=h["text"], hoverinfo="text",
+            marker=dict(size=18, color="rgba(0,0,0,0)", symbol="square"), showlegend=False,
+        ))
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None], mode="markers", name=SEGMENT_NAMES[seg], legendgroup=seg,
+            marker=dict(size=12, color=SEGMENT_COLORS[seg], symbol="square"), hoverinfo="skip",
         ))
 
     fig.update_layout(
