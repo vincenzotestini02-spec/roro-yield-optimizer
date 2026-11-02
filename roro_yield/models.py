@@ -98,3 +98,12 @@ class Plan:
     @property
     def accepted_ids(self) -> list[str]:
         return list(self.placements)
+
+
+UNIT_LABELS: dict[str, str] = {
+    "semi_trailer": "semi-trailer",
+    "accompanied_truck": "accompanied truck",
+    "mafi": "mafi roll-trailer",
+    "van": "van",
+    "car_batch": "car batch",
+}
