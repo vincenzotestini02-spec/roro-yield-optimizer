@@ -107,7 +107,7 @@ def view_for(scenario: Scenario, params: ScenarioParams, deck: DeckState, index:
     return PolicyView(
         params=params,
         vessel=scenario.vessel,
-        commitment_m=params.contract_floor_share * scenario.vessel.total_lane_m,
+        commitment_m=scenario.contract_commitment_m,
         penalty_per_m=scenario.shortfall_penalty_per_m,
         deck=deck.copy(),
         history=tuple(scenario.bookings[:index]),

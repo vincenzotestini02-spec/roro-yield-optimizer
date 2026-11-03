@@ -2,19 +2,24 @@
 
 from __future__ import annotations
 
+from .advisor import PolicyView, view_for
 from .deck import DeckState
-from .models import Booking, Plan, Scenario
+from .models import Booking, Plan, Scenario, Slot
+from .simulator import ScenarioParams, expected_contract_m
 
 PLAYER_LABEL = "You"
 
 
 class GameSession:
-    def __init__(self, scenario: Scenario):
+    def __init__(self, scenario: Scenario, params: ScenarioParams):
         self.scenario = scenario
+        self.params = params
         self.queue = sorted(scenario.bookings, key=lambda b: b.arrival)
         self.index = 0
+        self.pending_index: int | None = None  # manual mode: accept clicked, slot not chosen yet
         self.deck = DeckState(scenario.vessel)
-        self.log: list[tuple[str, str]] = []
+        self.log: list[tuple[str, str, Slot | None]] = []
+        self._expected_cache: dict[int, float] = {}
 
     @property
     def is_finished(self) -> bool:
@@ -24,34 +29,79 @@ class GameSession:
     def current(self) -> Booking | None:
         return None if self.is_finished else self.queue[self.index]
 
-    def accept(self, expected_index: int) -> str | None:
-        """Load the current request. Returns None on success, or the reason it can't be loaded.
-        Clicks whose `expected_index` is stale (e.g. replayed on a rerun) are ignored."""
-        if expected_index != self.index or self.is_finished:
-            return None
-        b = self.current
+    def _stale(self, expected_index: int) -> bool:
+        return expected_index != self.index or self.is_finished
+
+    def _slot_reason(self, b: Booking, slot: Slot) -> str | None:
+        """None if `b` can go into `slot`, else a short human reason."""
         reason = self.deck.why_not(b)
         if reason is not None:
             return reason
-        self.deck.place(b)
-        self.log.append((b.id, "accepted"))
+        if slot not in self.deck.feasible_slots(b):
+            return "that zone can't take this unit (not enough space or stability)"
+        return None
+
+    def _load(self, slot: Slot | None) -> str | None:
+        b = self.current
+        reason = self.deck.why_not(b) if slot is None else self._slot_reason(b, slot)
+        if reason is not None:
+            return reason
+        placed = self.deck.place(b, slot)
+        self.log.append((b.id, "accepted", placed))
+        self.pending_index = None
         self.index += 1
         return None
 
+    def accept(self, expected_index: int, slot: Slot | None = None) -> str | None:
+        """Load the current request (auto slot unless `slot` given). Returns None on success,
+        or the reason it can't be loaded. Stale `expected_index` clicks are ignored."""
+        if self._stale(expected_index):
+            return None
+        return self._load(slot)
+
+    def request_accept(self, expected_index: int) -> str | None:
+        """Manual mode step 1: mark the current request as pending a slot choice."""
+        if self._stale(expected_index):
+            return None
+        reason = self.deck.why_not(self.current)
+        if reason is not None:
+            return reason
+        self.pending_index = expected_index
+        return None
+
+    def confirm_slot(self, expected_index: int, slot: Slot) -> str | None:
+        """Manual mode step 2: load the pending request into `slot`."""
+        if self._stale(expected_index) or self.pending_index != expected_index:
+            return None
+        return self._load(slot)
+
+    def cancel_pending(self) -> None:
+        self.pending_index = None
+
     def reject(self, expected_index: int) -> None:
-        if expected_index != self.index or self.is_finished:
+        if self._stale(expected_index):
             return
-        self.log.append((self.current.id, "rejected"))
+        self.log.append((self.current.id, "rejected", None))
+        self.pending_index = None
         self.index += 1
 
+    def view_at_current(self) -> PolicyView:
+        return view_for(self.scenario, self.params, self.deck, self.index)
+
     def contract_floor_at_risk(self) -> bool:
-        """True when even accepting every remaining contract request can't reach the floor."""
+        """True when loaded contract metres plus the expected contract metres still to come fall
+        short of the commitment. Uses only the demand distribution, never the real queue."""
+        if self.is_finished:
+            return False
         loaded = sum(self.scenario.booking(i).length_m for i in self.deck.placements
                      if self.scenario.booking(i).segment == "contract")
-        still_to_come = sum(b.length_m for b in self.queue[self.index:] if b.segment == "contract")
-        return loaded + still_to_come < self.scenario.contract_floor_m - 1e-9
+        if self.index not in self._expected_cache:
+            remaining = len(self.queue) - self.index - 1
+            self._expected_cache[self.index] = expected_contract_m(
+                self.params, self.current.arrival_frac, remaining)
+        return loaded + self._expected_cache[self.index] < self.scenario.contract_commitment_m - 1e-9
 
     def to_plan(self) -> Plan:
-        rejected = [booking_id for booking_id, action in self.log if action == "rejected"]
+        rejected = [booking_id for booking_id, action, _ in self.log if action == "rejected"]
         rejected += [b.id for b in self.queue[self.index:]]
         return Plan(PLAYER_LABEL, dict(self.deck.placements), rejected)

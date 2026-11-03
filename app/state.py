@@ -18,7 +18,8 @@ STAGES = ("game", "reveal", "lab")
 
 def new_game(seed: int) -> None:
     st.session_state["seed"] = seed
-    st.session_state["game"] = GameSession(generate_scenario(replace(GAME_PARAMS, seed=seed)))
+    params = replace(GAME_PARAMS, seed=seed)
+    st.session_state["game"] = GameSession(generate_scenario(params), params)
     st.session_state["game_msg"] = None
     st.session_state["stage"] = "game"
 
