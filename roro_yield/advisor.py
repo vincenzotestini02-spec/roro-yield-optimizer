@@ -12,16 +12,18 @@ gain_f = V_a − V_b; accept iff the mean gain is positive (and the unit can be 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Callable
 
 import numpy as np
 import pulp
 
 from .deck import DeckState
-from .models import Booking, Vessel
+from .models import Booking, Plan, Scenario, Vessel
 from .optimizer import build_model
 from .simulator import ScenarioParams, sample_future
 
-ADVISOR_LABEL = "Smart planner (no foresight)"
+SMART_LABEL = "Smart planner (no foresight)"
+ADVISOR_LABEL = SMART_LABEL
 
 
 @dataclass(frozen=True)
@@ -71,14 +73,16 @@ def _solve_value(prob: pulp.LpProblem) -> float:
 
 
 def advise(view: PolicyView, k: int = 20) -> Verdict:
-    current, deck = view.current, view.deck
+    current, deck = view.current, view.deck.copy()  # defensive: never touch the caller's deck
     reason = deck.why_not(current)
     if reason is not None:
         return Verdict(current.id, False, False, 0, 0, 0.0, reason)
 
     slot = deck.best_slot(current)
+    assert slot is not None, "why_not passed but best_slot found no slot"
     rng = np.random.default_rng([view.seed, view.index])
-    n_remaining = max(0, view.n_total - view.index - 1)
+    assert view.index < view.n_total, "request index beyond n_total"
+    n_remaining = view.n_total - view.index - 1
     requested_m = _contract_m(view.history) + _contract_m([current])
 
     gains = []
@@ -95,4 +99,43 @@ def advise(view: PolicyView, k: int = 20) -> Verdict:
 
     mean_gain = float(np.mean(gains)) if gains else 0.0
     n_pays_off = int(sum(g > 1e-9 for g in gains))
-    return Verdict(current.id, mean_gain > 0, True, n_pays_off, k, mean_gain, None)
+    return Verdict(current.id, mean_gain > 1e-9, True, n_pays_off, k, mean_gain, None)
+
+
+def view_for(scenario: Scenario, params: ScenarioParams, deck: DeckState, index: int) -> PolicyView:
+    """The advisor's view at request `index`: past requests, the current one, a copy of the deck."""
+    return PolicyView(
+        params=params,
+        vessel=scenario.vessel,
+        commitment_m=params.contract_floor_share * scenario.vessel.total_lane_m,
+        penalty_per_m=scenario.shortfall_penalty_per_m,
+        deck=deck.copy(),
+        history=tuple(scenario.bookings[:index]),
+        current=scenario.bookings[index],
+        index=index,
+        n_total=len(scenario.bookings),
+        seed=params.seed,
+    )
+
+
+def smart_plan(
+    scenario: Scenario,
+    params: ScenarioParams,
+    k: int = 20,
+    on_progress: Callable[[int, int], None] | None = None,
+) -> tuple[Plan, list[Verdict]]:
+    """Play every request in arrival order: accept per verdict, load at the auto slot."""
+    deck = DeckState(scenario.vessel)
+    n = len(scenario.bookings)
+    rejected: list[str] = []
+    verdicts: list[Verdict] = []
+    for index, booking in enumerate(scenario.bookings):
+        verdict = advise(view_for(scenario, params, deck, index), k=k)
+        verdicts.append(verdict)
+        if verdict.accept:
+            deck.place(booking)
+        else:
+            rejected.append(booking.id)
+        if on_progress is not None:
+            on_progress(index + 1, n)
+    return Plan(SMART_LABEL, deck.placements, rejected), verdicts

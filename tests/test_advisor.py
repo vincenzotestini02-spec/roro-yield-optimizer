@@ -3,26 +3,13 @@ from dataclasses import replace
 
 import pytest
 
-from roro_yield.advisor import PolicyView, Verdict, advise
-from roro_yield.deck import DeckState
+from roro_yield.advisor import SMART_LABEL, PolicyView, Verdict, advise, smart_plan, view_for
+from roro_yield.fcfs import solve_fcfs
+from roro_yield.kpis import objective
+from roro_yield.optimizer import solve_optimal
+from roro_yield.deck import DeckState, check_plan
 from roro_yield.models import Booking, Lane, Scenario, Vessel
 from roro_yield.simulator import ScenarioParams, generate_scenario
-
-
-def view_from(scenario: Scenario, params: ScenarioParams, deck: DeckState, index: int) -> PolicyView:
-    """The advisor's view at request `index`: past requests, the current one, a copy of the deck."""
-    return PolicyView(
-        params=params,
-        vessel=scenario.vessel,
-        commitment_m=scenario.contract_commitment_m,
-        penalty_per_m=scenario.shortfall_penalty_per_m,
-        deck=deck.copy(),
-        history=tuple(scenario.bookings[:index]),
-        current=scenario.bookings[index],
-        index=index,
-        n_total=len(scenario.bookings),
-        seed=params.seed,
-    )
 
 
 def _bk(bid, segment="spot", rate=80.0, weight=10.0, length=13.6, frac=0.5, reefer=False, handling=0.0):
@@ -38,8 +25,8 @@ def test_information_set():
     assert s1.bookings[10:] != s2.bookings[10:]
     deck = DeckState(s1.vessel)
     for index in range(10):
-        v1 = advise(view_from(s1, params, deck, index), k=4)
-        v2 = advise(view_from(s2, params, deck, index), k=4)
+        v1 = advise(view_for(s1, params, deck, index), k=4)
+        v2 = advise(view_for(s2, params, deck, index), k=4)
         assert v1 == v2
         if v1.accept:
             deck.place(s1.bookings[index])
@@ -48,7 +35,7 @@ def test_information_set():
 def test_infeasible_verdict():
     vessel = Vessel("V", "A → B", (Lane("L1", 70.0),), 5.0, 0, 0.5)  # 5 t deadweight
     s = Scenario(vessel, (_bk("B001", weight=10.0),), 0.0, 200.0)
-    v = advise(view_from(s, ScenarioParams(), DeckState(vessel), 0))
+    v = advise(view_for(s, ScenarioParams(), DeckState(vessel), 0))
     assert v == Verdict("B001", False, False, 0, 0, 0.0, "would exceed max deadweight")
     assert v.text == "Can't load: would exceed max deadweight"
 
@@ -59,7 +46,7 @@ def test_last_request():
     bad = _bk("B001", rate=5.0, handling=100.0)  # margin -32
     for current, accept in ((good, True), (bad, False)):
         s = Scenario(vessel, (current,), 0.0, 200.0)
-        v = advise(view_from(s, ScenarioParams(), DeckState(vessel), 0), k=5)
+        v = advise(view_for(s, ScenarioParams(), DeckState(vessel), 0), k=5)
         assert v.feasible and v.accept is accept
         assert v.k == 5 and v.n_pays_off == (5 if accept else 0)
         assert v.expected_gain_eur == pytest.approx(current.margin, abs=1e-6)
@@ -90,7 +77,7 @@ def test_deterministic():
     deck = DeckState(s.vessel)
     for b in s.bookings[:5]:
         deck.place(b)
-    assert advise(view_from(s, params, deck, 5), k=6) == advise(view_from(s, params, deck, 5), k=6)
+    assert advise(view_for(s, params, deck, 5), k=6) == advise(view_for(s, params, deck, 5), k=6)
 
 
 def test_verdict_text():
@@ -108,10 +95,64 @@ def test_verdict_time():
     for b in s.bookings[:10]:
         if deck.why_not(b) is None:
             deck.place(b)
-    view = view_from(s, params, deck, 10)
+    view = view_for(s, params, deck, 10)
     start = time.perf_counter()
     v = advise(view, k=20)
     elapsed = time.perf_counter() - start
     print(f"verdict time {elapsed:.2f} s: {v.text}")
     assert v.k == 20
     assert elapsed < 3
+
+
+def test_view_for_no_leak():
+    params = ScenarioParams(seed=2)
+    s = generate_scenario(params)
+    deck = DeckState(s.vessel)
+    v = view_for(s, params, deck, 7)
+    assert v.history == tuple(s.bookings[:7]) and v.current == s.bookings[7]
+    assert v.n_total == len(s.bookings) and v.deck is not deck
+    assert v.commitment_m == pytest.approx(s.contract_commitment_m)
+
+
+def _feasible(s, plan):
+    assert check_plan(s, plan) == []
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3])
+def test_smart_plan_feasible(seed):
+    params = ScenarioParams(seed=seed)
+    s = generate_scenario(params)
+    plan, verdicts = smart_plan(s, params, k=5)
+    assert plan.method == SMART_LABEL
+    assert len(verdicts) == len(s.bookings)
+    assert set(plan.placements) | set(plan.rejected) == {b.id for b in s.bookings}
+    assert not set(plan.placements) & set(plan.rejected)
+    _feasible(s, plan)
+
+
+def test_smart_le_best():
+    params = ScenarioParams(seed=1)
+    s = generate_scenario(params)
+    smart, _ = smart_plan(s, params, k=5)
+    best = solve_optimal(s, candidates=(smart,))
+    assert objective(s, best) >= objective(s, smart) - 1e-6
+
+
+def test_progress_callback_called():
+    params = ScenarioParams(seed=1)
+    s = generate_scenario(params)
+    calls = []
+    smart_plan(s, params, k=2, on_progress=lambda i, n: calls.append((i, n)))
+    n = len(s.bookings)
+    assert calls[0] == (1, n) and calls[-1] == (n, n) and len(calls) == n
+
+
+@pytest.mark.slow
+def test_smart_mean_beats_fcfs():
+    smart_scores, fcfs_scores = [], []
+    for seed in range(1, 11):
+        params = ScenarioParams(seed=seed)
+        s = generate_scenario(params)
+        smart_scores.append(objective(s, smart_plan(s, params, k=10)[0]))
+        fcfs_scores.append(objective(s, solve_fcfs(s)))
+    assert sum(smart_scores) / 10 >= sum(fcfs_scores) / 10
