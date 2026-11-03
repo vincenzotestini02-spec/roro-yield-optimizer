@@ -1,7 +1,9 @@
+import pytest
+
 from roro_yield.deck import check_plan
 from roro_yield.game import GameSession
 from roro_yield.models import Booking, Lane, Scenario, Slot, Vessel
-from roro_yield.simulator import ScenarioParams, generate_scenario
+from roro_yield.simulator import ScenarioParams, expected_contract_m, generate_scenario
 
 
 def bk(i, segment="spot", length=13.6):
@@ -163,18 +165,29 @@ def test_view_at_current_hides_future():
 
 
 def test_floor_risk_uses_expectation_not_queue():
-    def risky(future_segment):
+    # Commitment 30 m sits between the two queue totals: a queue-reading check would give
+    # 13.6 + 0 < 30 (True) for `a` and 13.6 + 27.2 >= 30 (False) for `b`.
+    def game(future_segment):
         bookings = [bk(0, "contract"), bk(1, future_segment), bk(2, future_segment)]
-        return session(two_lanes(bookings, floor=500.0))
+        return session(two_lanes(bookings, floor=30.0))
 
-    a, b = risky("spot"), risky("contract")
+    a, b = game("spot"), game("contract")
     a.accept(0)
     b.accept(0)
-    assert a.contract_floor_at_risk() == b.contract_floor_at_risk() is True
+    expected = expected_contract_m(PARAMS, a.current.arrival_frac, 1)
+    want = 13.6 + expected < 30.0
+    assert a.contract_floor_at_risk() == b.contract_floor_at_risk() == want
     # a tiny commitment is safe either way
     c = session(two_lanes([bk(0, "contract"), bk(1)], floor=1.0))
     c.accept(0)
     assert not c.contract_floor_at_risk()
+
+
+def test_view_at_current_raises_when_finished():
+    g = session(two_lanes([bk(0)]))
+    g.reject(0)
+    with pytest.raises(ValueError):
+        g.view_at_current()
 
 
 def test_floor_risk_false_when_finished():

@@ -86,6 +86,9 @@ class GameSession:
         self.index += 1
 
     def view_at_current(self) -> PolicyView:
+        """The advisor's view of the current request. Raises ValueError once the game is finished."""
+        if self.is_finished:
+            raise ValueError("game is finished: no current request")
         return view_for(self.scenario, self.params, self.deck, self.index)
 
     def contract_floor_at_risk(self) -> bool:
