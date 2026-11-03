@@ -70,3 +70,11 @@ def test_spot_rate_multiplier_scales_spot_rates():
     for a, b in zip(base.bookings, high.bookings):
         if a.segment == "spot":
             assert b.rate_per_m == a.rate_per_m * 1.5
+
+
+def test_arrival_frac_sorted_and_stability_from_params():
+    s = generate_scenario(ScenarioParams(max_heel_deg=1.0, ballast_tank_cap_t=50.0, lane_length_m=100.0))
+    fracs = [b.arrival_frac for b in s.bookings]
+    assert fracs == sorted(fracs) and all(0 <= f <= 1 for f in fracs)
+    st = s.vessel.stability
+    assert (st.max_heel_deg, st.tank_cap_t, st.end_tank_arm_m) == (1.0, 50.0, 40.0)

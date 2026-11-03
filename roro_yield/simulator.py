@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
-from .models import UNIT_TYPES, Booking, Lane, Scenario, Vessel
+from .models import DEFAULT_STABILITY, LANE_WIDTH_M, UNIT_TYPES, Booking, Lane, Scenario, Vessel
 
 KEY_ACCOUNTS = ("Nordfreight", "Baltic Logistics", "Humber Forwarding", "Jutland Cargo")
 TYPE_MIX = {
@@ -39,6 +39,10 @@ class ScenarioParams:
     contract_floor_share: float = 0.35
     shortfall_penalty_per_m: float = 200.0
     spot_rate_multiplier: float = 1.0
+    max_heel_deg: float = 2.0
+    max_trim_m: float = 0.5
+    ballast_tank_cap_t: float = 300.0
+    ballast_cost_per_t: float = 5.0
     seed: int = 42
 
 
@@ -68,7 +72,7 @@ def generate_scenario(params: ScenarioParams) -> Scenario:
     drafts.sort(key=lambda d: d[0])
     bookings = []
     spot_count = 0
-    for i, (_, segment, customer, unit, weight, is_reefer, rate) in enumerate(drafts):
+    for i, (frac, segment, customer, unit, weight, is_reefer, rate) in enumerate(drafts):
         if customer is None:
             spot_count += 1
             customer = f"Spot haulier #{spot_count}"
@@ -85,17 +89,28 @@ def generate_scenario(params: ScenarioParams) -> Scenario:
                 rate_per_m=rate,
                 reefer_fee=REEFER_FEE[segment],
                 handling_cost=HANDLING_PER_UNIT + HANDLING_PER_TONNE * weight,
+                arrival_frac=frac,
             )
         )
 
     vessel = Vessel(
         name="MV Nordic Bridge",
         route="Esbjerg → Immingham",
-        lanes=tuple(Lane(f"L{i}", params.lane_length_m) for i in range(1, params.n_lanes + 1)),
+        lanes=tuple(
+            Lane(f"L{i}", params.lane_length_m, (i - 1 - (params.n_lanes - 1) / 2) * LANE_WIDTH_M)
+            for i in range(1, params.n_lanes + 1)
+        ),
         max_dwt_t=params.max_dwt_t,
         reefer_plugs=params.reefer_plugs,
         lashing_gap_m=params.lashing_gap_m,
+        stability=replace(
+            DEFAULT_STABILITY,
+            max_heel_deg=params.max_heel_deg,
+            max_trim_m=params.max_trim_m,
+            tank_cap_t=params.ballast_tank_cap_t,
+            ballast_cost_per_t=params.ballast_cost_per_t,
+            end_tank_arm_m=0.4 * params.lane_length_m,
+        ),
     )
-    contract_m = sum(b.length_m for b in bookings if b.segment == "contract")
-    floor = min(params.contract_floor_share * vessel.total_lane_m, contract_m)
-    return Scenario(vessel, tuple(bookings), floor, params.shortfall_penalty_per_m)
+    commitment = params.contract_floor_share * vessel.total_lane_m
+    return Scenario(vessel, tuple(bookings), commitment, params.shortfall_penalty_per_m)
