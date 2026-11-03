@@ -46,28 +46,91 @@ class ScenarioParams:
     seed: int = 42
 
 
-def generate_scenario(params: ScenarioParams) -> Scenario:
-    rng = np.random.default_rng(params.seed)
+def _draw_request(rng: np.random.Generator, params: ScenarioParams):
+    """Draw one request: (arrival_frac, segment, customer, unit, weight, is_reefer, rate)."""
     type_names = list(TYPE_MIX)
     type_probs = list(TYPE_MIX.values())
+    segment = "contract" if rng.random() < params.contract_share else "spot"
+    unit = UNIT_TYPES[type_names[rng.choice(len(type_names), p=type_probs)]]
+    weight = round(float(rng.uniform(*unit.weight_range_t)), 1)
+    is_reefer = unit.can_be_reefer and rng.random() < REEFER_PROB
+    lo, hi = CONTRACT_ARRIVAL if segment == "contract" else SPOT_ARRIVAL
+    arrival_frac = float(rng.uniform(lo, hi))
+    if segment == "contract":
+        rate = round(float(rng.uniform(*CONTRACT_RATE)), 2)
+        customer = KEY_ACCOUNTS[int(rng.integers(len(KEY_ACCOUNTS)))]
+    else:
+        # Late spot requests pay a premium; the multiplier is the Lab's price/demand knob.
+        base = round(float(rng.uniform(*SPOT_RATE)) * (1 + SPOT_LATENESS_PREMIUM * arrival_frac), 2)
+        rate = base * params.spot_rate_multiplier
+        customer = None
+    return (arrival_frac, segment, customer, unit, weight, is_reefer, rate)
 
+
+def _make_booking(bid, arrival, frac, segment, customer, unit, weight, is_reefer, rate) -> Booking:
+    return Booking(
+        id=bid,
+        arrival=arrival,
+        segment=segment,
+        customer=customer,
+        unit_type=unit.name,
+        length_m=unit.length_m,
+        weight_t=weight,
+        is_reefer=is_reefer,
+        rate_per_m=rate,
+        reefer_fee=REEFER_FEE[segment],
+        handling_cost=HANDLING_PER_UNIT + HANDLING_PER_TONNE * weight,
+        arrival_frac=frac,
+    )
+
+
+MAX_SAMPLE_ATTEMPTS = 10_000
+
+
+def sample_future(
+    params: ScenarioParams, after_frac: float, n_remaining: int, rng: np.random.Generator
+) -> list[Booking]:
+    """Sample plausible future requests arriving after `after_frac` (ids F001...).
+
+    Rejection sampling over the generate_scenario recipe, at most MAX_SAMPLE_ATTEMPTS
+    draws in total; if exhausted, returns however many were accepted (possibly fewer
+    than n_remaining).
+    """
+    if n_remaining <= 0 or after_frac >= 1:
+        return []
     drafts = []
-    for _ in range(params.n_requests):
-        segment = "contract" if rng.random() < params.contract_share else "spot"
-        unit = UNIT_TYPES[type_names[rng.choice(len(type_names), p=type_probs)]]
-        weight = round(float(rng.uniform(*unit.weight_range_t)), 1)
-        is_reefer = unit.can_be_reefer and rng.random() < REEFER_PROB
-        lo, hi = CONTRACT_ARRIVAL if segment == "contract" else SPOT_ARRIVAL
-        arrival_frac = float(rng.uniform(lo, hi))
-        if segment == "contract":
-            rate = round(float(rng.uniform(*CONTRACT_RATE)), 2)
-            customer = KEY_ACCOUNTS[int(rng.integers(len(KEY_ACCOUNTS)))]
-        else:
-            # Late spot requests pay a premium; the multiplier is the Lab's price/demand knob.
-            base = round(float(rng.uniform(*SPOT_RATE)) * (1 + SPOT_LATENESS_PREMIUM * arrival_frac), 2)
-            rate = base * params.spot_rate_multiplier
-            customer = None
-        drafts.append((arrival_frac, segment, customer, unit, weight, is_reefer, rate))
+    attempts = 0
+    while len(drafts) < n_remaining and attempts < MAX_SAMPLE_ATTEMPTS:
+        attempts += 1
+        d = _draw_request(rng, params)
+        if d[0] > after_frac:
+            drafts.append(d)
+    drafts.sort(key=lambda d: d[0])
+    out = []
+    spot_count = 0
+    for i, (frac, segment, customer, unit, weight, is_reefer, rate) in enumerate(drafts):
+        if customer is None:
+            spot_count += 1
+            customer = f"Future spot #{spot_count}"
+        out.append(_make_booking(f"F{i + 1:03d}", i, frac, segment, customer, unit, weight, is_reefer, rate))
+    return out
+
+
+def expected_contract_m(
+    params: ScenarioParams, after_frac: float, n_remaining: int, n_samples: int = 200, seed: int = 0
+) -> float:
+    """Mean contract metres among n_remaining sampled future requests."""
+    rng = np.random.default_rng(seed)
+    totals = [
+        sum(b.length_m for b in sample_future(params, after_frac, n_remaining, rng) if b.segment == "contract")
+        for _ in range(n_samples)
+    ]
+    return float(np.mean(totals))
+
+
+def generate_scenario(params: ScenarioParams) -> Scenario:
+    rng = np.random.default_rng(params.seed)
+    drafts = [_draw_request(rng, params) for _ in range(params.n_requests)]
 
     drafts.sort(key=lambda d: d[0])
     bookings = []
@@ -76,22 +139,7 @@ def generate_scenario(params: ScenarioParams) -> Scenario:
         if customer is None:
             spot_count += 1
             customer = f"Spot haulier #{spot_count}"
-        bookings.append(
-            Booking(
-                id=f"B{i + 1:03d}",
-                arrival=i,
-                segment=segment,
-                customer=customer,
-                unit_type=unit.name,
-                length_m=unit.length_m,
-                weight_t=weight,
-                is_reefer=is_reefer,
-                rate_per_m=rate,
-                reefer_fee=REEFER_FEE[segment],
-                handling_cost=HANDLING_PER_UNIT + HANDLING_PER_TONNE * weight,
-                arrival_frac=frac,
-            )
-        )
+        bookings.append(_make_booking(f"B{i + 1:03d}", i, frac, segment, customer, unit, weight, is_reefer, rate))
 
     vessel = Vessel(
         name="MV Nordic Bridge",
