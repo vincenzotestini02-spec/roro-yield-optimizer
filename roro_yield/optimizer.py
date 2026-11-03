@@ -28,14 +28,15 @@ plan (a subclass of PuLP's HiGHS interface hands the start to highspy).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Sequence
 
 import pulp
 
-from .deck import check_plan
+from .deck import DeckState, check_plan
 from .fcfs import solve_fcfs
 from .kpis import objective, plan_ballast
-from .models import ZONES, Plan, Scenario, Slot
+from .models import ZONES, Booking, Lane, Plan, Scenario, Slot, Vessel
 
 OPTIMAL_LABEL = "Best possible (perfect foresight)"
 
@@ -74,60 +75,125 @@ def _best_of(scenario: Scenario, plans: Sequence[Plan]) -> Plan:
     return max(pool, key=lambda p: objective(scenario, p))
 
 
-def solve_optimal(scenario: Scenario, time_limit_s: float = 3, candidates: Sequence[Plan] = ()) -> Plan:
-    vessel = scenario.vessel
+@dataclass
+class StowageModel:
+    """A built §5.2 model. `forced` is the fixed-slot variable of a forced booking, if any."""
+
+    prob: pulp.LpProblem
+    y: dict[tuple[str, str, int], pulp.LpVariable]
+    shortfall: pulp.LpVariable
+    ballast: dict[str, pulp.LpVariable]
+    forced: pulp.LpVariable | None = None
+
+
+def build_model(
+    vessel: Vessel,
+    bookings: Sequence[Booking],
+    floor_m: float,
+    penalty_per_m: float,
+    *,
+    relaxed: bool = False,
+    deck: DeckState | None = None,
+    forced: tuple[Booking, Slot] | None = None,
+) -> StowageModel:
+    """Build the §5.2 model over `bookings`, in time linear in the number of variables.
+
+    relaxed: continuous y in [0, 1] (LP relaxation) instead of binaries.
+    deck:    units already loaded are constants: remaining zone lengths, weight, plugs,
+             moments and contract metres. Slots a booking cannot fit any more get no variable.
+    forced:  one more booking with a single variable `forced` at the given slot; the caller
+             fixes its bounds (1 = loaded there, 0 = rejected).
+    The objective omits the (constant) margin of units already on the deck.
+    """
     stab = vessel.stability
     gap = vessel.lashing_gap_m
+    cat = "Continuous" if relaxed else "Binary"
+    remaining = deck.remaining_m if deck is not None else {
+        Slot(lane.id, z): lane.zone_length_m for lane in vessel.lanes for z in range(ZONES)
+    }
+    base_weight = deck.weight_t if deck is not None else 0.0
+    base_plugs = deck.plugs_used if deck is not None else 0
+    base_mt, base_ml = deck.moments if deck is not None else (0.0, 0.0)
+    base_contract = (
+        sum(b.length_m for b, _ in deck.loads.values() if b.segment == "contract") if deck is not None else 0.0
+    )
+
+    prob = pulp.LpProblem("roro_yield", pulp.LpMaximize)
+    y: dict[tuple[str, str, int], pulp.LpVariable] = {}
+    obj, dwt, plugs, contract, m_t, m_l = [], [], [], [], [], []
+    in_slot: dict[Slot, list] = {}
+
+    def add_terms(b: Booking, var: pulp.LpVariable, slot: Slot, lane: Lane) -> None:
+        obj.append((var, b.margin))
+        dwt.append((var, b.weight_t))
+        if b.is_reefer:
+            plugs.append((var, 1.0))
+        if b.segment == "contract":
+            contract.append((var, b.length_m))
+        m_t.append((var, b.weight_t * lane.y_m))
+        m_l.append((var, b.weight_t * lane.zone_x_m(slot.zone)))
+        in_slot.setdefault(slot, []).append((var, b.effective_length(gap)))
+
+    one_each = []
+    for b in bookings:
+        length = b.effective_length(gap)
+        mine = []
+        for lane in vessel.lanes:
+            if length > lane.zone_length_m + 1e-9:
+                continue
+            for z in range(ZONES):
+                slot = Slot(lane.id, z)
+                if length > remaining[slot] + 1e-9:
+                    continue
+                var = prob.add_variable(f"y_{b.id}_{lane.id}_{z}", lowBound=0, upBound=1, cat=cat)
+                y[b.id, lane.id, z] = var
+                mine.append(var)
+                add_terms(b, var, slot, lane)
+        if len(mine) > 1:
+            one_each.append(mine)
+
+    forced_var = None
+    if forced is not None:
+        fb, fslot = forced
+        forced_var = prob.add_variable("forced", lowBound=0, upBound=1)
+        add_terms(fb, forced_var, fslot, vessel.lane(fslot.lane_id))
+
+    shortfall = prob.add_variable("shortfall", lowBound=0)
+    bal = {k: prob.add_variable(f"ballast_{k}", lowBound=0, upBound=stab.tank_cap_t)
+           for k in ("port", "stbd", "fore", "aft")}
+    bal_terms = [(v, 1.0) for v in bal.values()]
+
+    prob += pulp.LpAffineExpression(
+        obj + [(shortfall, -penalty_per_m)] + [(v, -stab.ballast_cost_per_t) for v in bal.values()]
+    )
+    for mine in one_each:
+        prob += pulp.LpAffineExpression([(v, 1.0) for v in mine]) <= 1
+    for slot, terms in in_slot.items():
+        prob += pulp.LpAffineExpression(terms) <= remaining[slot]
+    prob += pulp.LpAffineExpression(dwt + bal_terms) <= vessel.max_dwt_t - base_weight
+    if plugs:
+        prob += pulp.LpAffineExpression(plugs) <= vessel.reefer_plugs - base_plugs
+    prob += pulp.LpAffineExpression(contract + [(shortfall, 1.0)]) >= floor_m - base_contract
+
+    a_t, a_l = stab.side_tank_arm_m, stab.end_tank_arm_m
+    heel = pulp.LpAffineExpression(m_t + [(bal["port"], -a_t), (bal["stbd"], a_t)])
+    trim = pulp.LpAffineExpression(m_l + [(bal["fore"], a_l), (bal["aft"], -a_l)])
+    prob += heel <= stab.heel_limit_tm - base_mt
+    prob += heel >= -stab.heel_limit_tm - base_mt
+    prob += trim <= stab.trim_limit_tm - base_ml
+    prob += trim >= -stab.trim_limit_tm - base_ml
+    return StowageModel(prob, y, shortfall, bal, forced_var)
+
+
+def solve_optimal(scenario: Scenario, time_limit_s: float = 3, candidates: Sequence[Plan] = ()) -> Plan:
+    vessel = scenario.vessel
 
     seeds = [solve_fcfs(scenario), *candidates]
     incumbent = _best_of(scenario, seeds)
 
-    prob = pulp.LpProblem("roro_yield", pulp.LpMaximize)
-    slots = [Slot(lane.id, z) for lane in vessel.lanes for z in range(ZONES)]
-    y = {}
-    for b in scenario.bookings:
-        for lane in vessel.lanes:
-            if b.effective_length(gap) > lane.zone_length_m + 1e-9:
-                continue
-            for z in range(ZONES):
-                y[b.id, lane.id, z] = prob.add_variable(f"y_{b.id}_{lane.id}_{z}", cat="Binary")
-    slots_of = {b.id: [k for k in y if k[0] == b.id] for b in scenario.bookings}
-    taken = {b.id: pulp.lpSum(y[k] for k in slots_of[b.id]) for b in scenario.bookings}
-    shortfall = prob.add_variable("shortfall", lowBound=0)
-    bal = {k: prob.add_variable(f"ballast_{k}", lowBound=0, upBound=stab.tank_cap_t)
-           for k in ("port", "stbd", "fore", "aft")}
-    total_ballast = pulp.lpSum(bal.values())
-
-    prob += (
-        pulp.lpSum(b.margin * taken[b.id] for b in scenario.bookings)
-        - scenario.shortfall_penalty_per_m * shortfall
-        - stab.ballast_cost_per_t * total_ballast
-    )
-    for b in scenario.bookings:
-        if len(slots_of[b.id]) > 1:
-            prob += taken[b.id] <= 1
-    for slot in slots:
-        in_slot = [b.effective_length(gap) * y[b.id, slot.lane_id, slot.zone]
-                   for b in scenario.bookings if (b.id, slot.lane_id, slot.zone) in y]
-        if in_slot:
-            prob += pulp.lpSum(in_slot) <= vessel.lane(slot.lane_id).zone_length_m
-    prob += pulp.lpSum(b.weight_t * taken[b.id] for b in scenario.bookings) + total_ballast <= vessel.max_dwt_t
-    prob += pulp.lpSum(taken[b.id] for b in scenario.bookings if b.is_reefer) <= vessel.reefer_plugs
-    prob += shortfall >= scenario.contract_floor_m - pulp.lpSum(
-        b.length_m * taken[b.id] for b in scenario.bookings if b.segment == "contract"
-    )
-
-    lane_y = {lane.id: lane.y_m for lane in vessel.lanes}
-    zone_x = {(lane.id, z): lane.zone_x_m(z) for lane in vessel.lanes for z in range(ZONES)}
+    model = build_model(vessel, scenario.bookings, scenario.contract_floor_m, scenario.shortfall_penalty_per_m)
+    prob, y = model.prob, model.y
     by_id = {b.id: b for b in scenario.bookings}
-    m_t = pulp.lpSum(by_id[i].weight_t * lane_y[lane] * var for (i, lane, z), var in y.items())
-    m_l = pulp.lpSum(by_id[i].weight_t * zone_x[lane, z] * var for (i, lane, z), var in y.items())
-    m_t = m_t - stab.side_tank_arm_m * bal["port"] + stab.side_tank_arm_m * bal["stbd"]
-    m_l = m_l + stab.end_tank_arm_m * bal["fore"] - stab.end_tank_arm_m * bal["aft"]
-    prob += m_t <= stab.heel_limit_tm
-    prob += m_t >= -stab.heel_limit_tm
-    prob += m_l <= stab.trim_limit_tm
-    prob += m_l >= -stab.trim_limit_tm
 
     # Warm start from the incumbent (best of FCFS and candidates).
     start = {v.name: 0.0 for v in prob.variables()}
