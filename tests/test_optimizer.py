@@ -1,12 +1,13 @@
 import time
 
+import pulp
 import pytest
 
-from roro_yield.deck import check_plan
+from roro_yield.deck import DeckState, check_plan
 from roro_yield.fcfs import solve_fcfs
-from roro_yield.kpis import evaluate, objective
+from roro_yield.kpis import evaluate, objective, plan_ballast
 from roro_yield.models import Booking, Lane, Plan, Scenario, Slot, Vessel
-from roro_yield.optimizer import OPTIMAL_LABEL, solve_optimal
+from roro_yield.optimizer import OPTIMAL_LABEL, build_model, solve_optimal
 from roro_yield.simulator import ScenarioParams, generate_scenario
 
 
@@ -108,3 +109,43 @@ def test_extreme_scenarios_v2(params):
     for plan in (solve_fcfs(s), solve_optimal(s)):
         assert check_plan(s, plan) == []
         evaluate(s, plan)
+
+
+def _lopsided_deck(scenario) -> DeckState:
+    """Load each request as far starboard and towards the bow as it may go, so ballast is needed."""
+    deck = DeckState(scenario.vessel)
+    vessel = scenario.vessel
+
+    def lean(slot):
+        lane = vessel.lane(slot.lane_id)
+        return lane.y_m + lane.zone_x_m(slot.zone)
+
+    for b in sorted(scenario.bookings, key=lambda b: -b.weight_t):  # heaviest first
+        slots = deck.feasible_slots(b)
+        if slots:
+            deck.place(b, max(slots, key=lean))
+    return deck
+
+
+def _fcfs_deck(scenario) -> DeckState:
+    deck = DeckState(scenario.vessel)
+    for bid, slot in solve_fcfs(scenario).placements.items():
+        deck.place(scenario.booking(bid), slot)
+    return deck
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3])
+@pytest.mark.parametrize("make_deck", [_fcfs_deck, _lopsided_deck])
+def test_closed_form_ballast_equals_milp_ballast(seed, make_deck):
+    """Spec §5.6: on fixed placements the MILP's ballast is exactly the closed-form minimum."""
+    s = generate_scenario(ScenarioParams(seed=seed))
+    deck = make_deck(s)
+    plan = Plan("fixed", deck.placements, [])
+    closed, _ = plan_ballast(s, plan)
+    model = build_model(s.vessel, [], s.contract_floor_m, s.shortfall_penalty_per_m, deck=deck)
+    model.prob.solve(pulp.HiGHS(msg=False))
+    assert pulp.LpStatus[model.prob.status] == "Optimal"
+    milp_total = sum(v.value() or 0.0 for v in model.ballast.values())
+    assert milp_total == pytest.approx(closed.total_t, abs=1e-6)
+    if make_deck is _lopsided_deck:
+        assert closed.total_t > 0  # the comparison is not trivially 0 == 0

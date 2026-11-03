@@ -2,7 +2,9 @@
 
 The advisor sees only a `PolicyView`: the current request, every past request (accepted or
 not), a copy of its own deck, "request k of n" and the demand distribution (`ScenarioParams`).
-It never receives a `Scenario`, so it cannot read the bookings still to come.
+It never receives a `Scenario`, so it cannot read the bookings still to come. The boundary is
+structural: the view's `params` carry a neutral seed (so `ScenarioParams` cannot rebuild this
+sailing), and the advisor's own sampling seed is a one-way hash of the game seed.
 
 For each of K sampled futures it solves two LP relaxations of the §5.2 model with the deck's
 loads fixed: (a) the current unit loaded where the auto-placement rule puts it, (b) rejected.
@@ -11,7 +13,8 @@ gain_f = V_a − V_b; accept iff the mean gain is positive (and the unit can be 
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import hashlib
+from dataclasses import dataclass, replace
 from typing import Callable
 
 import numpy as np
@@ -24,11 +27,21 @@ from .simulator import ScenarioParams, sample_future
 
 SMART_LABEL = "Smart planner (no foresight)"
 ADVISOR_LABEL = SMART_LABEL
+NEUTRAL_SEED = 0  # the seed the advisor's ScenarioParams carry: never the game's own
+
+
+def advisor_rng_seed(game_seed: int) -> int:
+    """A stable seed for the advisor's sampling, derived one-way from the game seed.
+
+    Verdicts stay deterministic per game, but the advisor cannot regenerate the scenario.
+    """
+    digest = hashlib.sha256(f"advisor:{game_seed}".encode()).digest()
+    return int.from_bytes(digest[:8], "big")
 
 
 @dataclass(frozen=True)
 class PolicyView:
-    params: ScenarioParams
+    params: ScenarioParams  # the demand distribution, with seed = NEUTRAL_SEED
     vessel: Vessel
     commitment_m: float
     penalty_per_m: float
@@ -37,7 +50,7 @@ class PolicyView:
     current: Booking
     index: int  # 0-based position of `current` among the n_total requests
     n_total: int
-    seed: int
+    rng_seed: int  # advisor_rng_seed(game seed): for sampling futures only
 
 
 @dataclass(frozen=True)
@@ -80,7 +93,7 @@ def advise(view: PolicyView, k: int = 20) -> Verdict:
 
     slot = deck.best_slot(current)
     assert slot is not None, "why_not passed but best_slot found no slot"
-    rng = np.random.default_rng([view.seed, view.index])
+    rng = np.random.default_rng([view.rng_seed, view.index])
     assert view.index < view.n_total, "request index beyond n_total"
     n_remaining = view.n_total - view.index - 1
     requested_m = _contract_m(view.history) + _contract_m([current])
@@ -105,7 +118,7 @@ def advise(view: PolicyView, k: int = 20) -> Verdict:
 def view_for(scenario: Scenario, params: ScenarioParams, deck: DeckState, index: int) -> PolicyView:
     """The advisor's view at request `index`: past requests, the current one, a copy of the deck."""
     return PolicyView(
-        params=params,
+        params=replace(params, seed=NEUTRAL_SEED),
         vessel=scenario.vessel,
         commitment_m=scenario.contract_commitment_m,
         penalty_per_m=scenario.shortfall_penalty_per_m,
@@ -114,7 +127,7 @@ def view_for(scenario: Scenario, params: ScenarioParams, deck: DeckState, index:
         current=scenario.bookings[index],
         index=index,
         n_total=len(scenario.bookings),
-        seed=params.seed,
+        rng_seed=advisor_rng_seed(params.seed),
     )
 
 

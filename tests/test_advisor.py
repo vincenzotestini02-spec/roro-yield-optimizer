@@ -1,9 +1,20 @@
 import time
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
-from roro_yield.advisor import SMART_LABEL, PolicyView, Verdict, advise, smart_plan, view_for
+import roro_yield.advisor as advisor_module
+from roro_yield.advisor import (
+    NEUTRAL_SEED,
+    SMART_LABEL,
+    PolicyView,
+    Verdict,
+    advise,
+    advisor_rng_seed,
+    smart_plan,
+    view_for,
+)
 from roro_yield.fcfs import solve_fcfs
 from roro_yield.kpis import objective
 from roro_yield.optimizer import solve_optimal
@@ -64,7 +75,7 @@ def test_rejects_cheap_contract_early_when_spot_rich():
     current = _bk("B041", "contract", rate=45.0, weight=10.0, frac=0.3, handling=95.0)
     assert deck.why_not(current) is None and current.margin > 0
     view = PolicyView(params, vessel, 0.3 * vessel.total_lane_m, params.shortfall_penalty_per_m,
-                      deck.copy(), tuple(history), current, 40, 100, params.seed)
+                      deck.copy(), tuple(history), current, 40, 100, advisor_rng_seed(params.seed))
     v = advise(view)
     assert v.feasible and not v.accept
     assert v.expected_gain_eur < 0
@@ -112,6 +123,29 @@ def test_view_for_no_leak():
     assert v.history == tuple(s.bookings[:7]) and v.current == s.bookings[7]
     assert v.n_total == len(s.bookings) and v.deck is not deck
     assert v.commitment_m == pytest.approx(s.contract_commitment_m)
+
+
+def test_view_cannot_regenerate_the_scenario():
+    params = ScenarioParams(seed=7)
+    s = generate_scenario(params)
+    v = view_for(s, params, DeckState(s.vessel), 3)
+    assert v.params.seed == NEUTRAL_SEED and v.params == replace(params, seed=NEUTRAL_SEED)
+    assert v.rng_seed != params.seed
+    assert generate_scenario(v.params).bookings != s.bookings
+
+
+def test_rng_seed_is_stable_and_per_game():
+    assert advisor_rng_seed(7) == advisor_rng_seed(7)
+    assert advisor_rng_seed(7) != advisor_rng_seed(8)
+    s = generate_scenario(ScenarioParams(seed=7))
+    v1 = view_for(s, ScenarioParams(seed=7), DeckState(s.vessel), 0)
+    v2 = view_for(s, ScenarioParams(seed=8), DeckState(s.vessel), 0)
+    assert v1.rng_seed == advisor_rng_seed(7) and v2.rng_seed == advisor_rng_seed(8)
+
+
+def test_advisor_source_never_touches_generate_scenario():
+    source = Path(advisor_module.__file__).read_text(encoding="utf-8")
+    assert "generate_scenario" not in source
 
 
 def _feasible(s, plan):
