@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 
 import streamlit as st
@@ -13,6 +14,7 @@ from app.state import (
     PLACEMENT_MODES,
     get_session,
     init_toggles,
+    remember_toggles,
     set_stage,
     submit_verdict,
     verdict_now,
@@ -20,6 +22,7 @@ from app.state import (
 from roro_yield.models import UNIT_LABELS, ZONES, Slot
 
 ZONE_NAMES = ("stern", "aft-mid", "fore-mid", "bow")
+log = logging.getLogger(__name__)
 
 
 def _manual() -> bool:
@@ -127,10 +130,15 @@ def _request_card(game) -> None:
         st.markdown(f"Rate **€{b.rate_per_m:.0f}/m**{fee}  \nMargin if loaded: **€{b.margin:,.0f}**")
         if st.session_state.get("advisor_on"):
             started = time.perf_counter()
-            with st.spinner("💡 The advisor is playing out possible futures…"):
-                verdict = verdict_now(game)
-            st.session_state["advisor_last_s"] = time.perf_counter() - started
-            st.markdown(f"💡 **Advisor:** {verdict.text}")
+            try:
+                with st.spinner("💡 The advisor is playing out possible futures…"):
+                    verdict = verdict_now(game)
+            except Exception:  # the advisor must never take the game down
+                log.exception("advisor failed on request %d", game.index)
+                st.markdown("💡 Advisor unavailable for this request.")
+            else:
+                st.session_state["advisor_last_s"] = time.perf_counter() - started
+                st.markdown(f"💡 **Advisor:** {verdict.text}")
         if game.pending_index == game.index:
             st.markdown("**Pick a green zone** on the deck, or use the zone buttons under it.")
             c, r = st.columns(2)
@@ -142,7 +150,9 @@ def _request_card(game) -> None:
         r.button("✗ Reject", key="reject", width="stretch", on_click=_reject, args=(game.index,))
 
     msg = st.session_state.get("game_msg")
-    if msg:
+    if msg and game.pending_index == game.index:
+        st.warning(f"Can't load it there: {msg}. Pick another zone or cancel.")
+    elif msg:
         st.warning(f"Can't load it: {msg}. Reject it to continue.")
     if game.contract_floor_at_risk():
         penalty = game.scenario.shortfall_penalty_per_m
@@ -198,6 +208,7 @@ def _toggles() -> None:
     a.radio("Placement", options=list(PLACEMENT_MODES), format_func=PLACEMENT_MODES.get,
             key="placement_mode", horizontal=True, label_visibility="collapsed", on_change=_mode_changed)
     b.toggle(ADVISOR_TOGGLE_LABEL, key="advisor_on")
+    remember_toggles()
 
 
 def render() -> None:

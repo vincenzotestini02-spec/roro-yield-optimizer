@@ -52,3 +52,13 @@ def test_manifest_has_zone_and_ballast_rows():
     assert list(ballast["unit_type"]) == ["port tank"]
     assert ballast["weight_t"].iloc[0] > 0
     assert df.iloc[-1]["lane"] == "BALLAST"
+
+
+def test_manifest_zone_and_position_are_integers_with_ballast_rows():
+    b = Booking("B0", 0, "spot", "H", "semi_trailer", 13.6, 60.0, False, 100.0, 150.0, 110.0)
+    s = Scenario(Vessel("V", "A → B", (Lane("L1", 120.0, 9.0),), 1000.0, 5, 0.5), (b,), 0.0, 200.0)
+    plan = Plan("x", {"B0": Slot("L1", 0)}, [])
+    df = manifest_dataframe(s, plan)
+    assert str(df["zone"].dtype) == "Int64" and str(df["position"].dtype) == "Int64"
+    text = manifest_csv(s, plan).decode("utf-8").splitlines()
+    assert text[1].startswith("L1,0,1,B0")

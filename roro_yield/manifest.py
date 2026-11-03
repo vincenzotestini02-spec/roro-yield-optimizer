@@ -31,6 +31,7 @@ def manifest_dataframe(scenario: Scenario, plan: Plan) -> pd.DataFrame:
     extra = [["BALLAST", None, None, "", "", "", name, 0.0, t, False] for name, t in tanks if t > 0]
     if extra:
         df = pd.concat([df, pd.DataFrame(extra, columns=MANIFEST_COLUMNS)], ignore_index=True)
+    df = df.astype({"zone": "Int64", "position": "Int64"})  # ballast rows are blank, not 0.0
     return df.reset_index(drop=True)
 
 

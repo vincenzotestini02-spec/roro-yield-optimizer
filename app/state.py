@@ -28,9 +28,25 @@ def get_jobs() -> JobRunner:
     return st.session_state["jobs"]
 
 
+# Streamlit drops a widget's state on a run where the widget isn't drawn (e.g. the Reveal), so the
+# player's choices are mirrored in plain session keys and restored from there.
+_TOGGLE_DEFAULTS = {"placement_mode": "auto", "advisor_on": False}
+
+
+def _pref_key(key: str) -> str:
+    return f"pref_{key}"
+
+
 def init_toggles() -> None:
-    st.session_state.setdefault("placement_mode", "auto")
-    st.session_state.setdefault("advisor_on", False)
+    for key, default in _TOGGLE_DEFAULTS.items():
+        st.session_state.setdefault(key, st.session_state.get(_pref_key(key), default))
+
+
+def remember_toggles() -> None:
+    """Call after the toggle widgets are drawn: keeps the choices for the next game."""
+    for key in _TOGGLE_DEFAULTS:
+        if key in st.session_state:
+            st.session_state[_pref_key(key)] = st.session_state[key]
 
 
 def new_game(seed: int) -> None:
@@ -42,7 +58,8 @@ def new_game(seed: int) -> None:
     st.session_state["stage"] = "game"
     init_toggles()
     jobs = get_jobs()
-    # Drops other seeds' jobs and every verdict (verdicts depend on the old game's deck).
+    # Drops other seeds' jobs, every verdict (verdicts depend on the old game's deck) and any Lab
+    # smart run still queued or running; finished Lab runs survive in `lab_smart_results`.
     jobs.forget_except(("smart", seed))
     jobs.submit(("smart", seed), smart_plan, scenario, params, ADVISOR_K)
 
@@ -91,3 +108,39 @@ def benchmark_plans(params: ScenarioParams) -> tuple[Plan, Plan]:
     """FCFS and optimal plans for a scenario, cached by its parameters."""
     scenario = generate_scenario(params)
     return solve_fcfs(scenario), solve_optimal(scenario)
+
+
+def reveal_best(seed: int, scenario, smart: Plan | None) -> Plan:
+    """Best possible plan for the game of `seed`, seeded with the smart plan; cached by seed."""
+    cache = st.session_state.setdefault("reveal_best", {})
+    key = (seed, smart is not None)
+    if key not in cache:
+        cache[key] = solve_optimal(scenario, candidates=() if smart is None else (smart,))
+    return cache[key]
+
+
+def lab_smart_key(params: ScenarioParams) -> tuple:
+    return ("lab_smart", params)
+
+
+def lab_smart_result(params: ScenarioParams) -> Plan | None:
+    """The Lab's smart plan for `params` once its job is done (kept across new games), else None."""
+    done = st.session_state.setdefault("lab_smart_results", {})
+    if params not in done:
+        result = get_jobs().result(lab_smart_key(params))
+        if result is None:
+            return None
+        done[params] = result[0]
+    return done[params]
+
+
+def submit_lab_smart(params: ScenarioParams) -> None:
+    get_jobs().submit(lab_smart_key(params), smart_plan, generate_scenario(params), params, ADVISOR_K)
+
+
+def lab_best_with_smart(params: ScenarioParams, smart: Plan) -> Plan:
+    """The Lab's Best once the smart plan exists: the optimizer warm-started from it too."""
+    cache = st.session_state.setdefault("lab_best_smart", {})
+    if params not in cache:
+        cache[params] = solve_optimal(generate_scenario(params), candidates=(smart,))
+    return cache[params]
