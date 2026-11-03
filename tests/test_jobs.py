@@ -141,3 +141,29 @@ def test_paused_holds_progress_jobs_at_their_next_progress_call():
         time.sleep(0.2)
         assert len(count) <= frozen + 1
     assert _wait(jobs, ("smart", 1)) == "ok"
+
+
+def test_forget_drops_only_keys_with_the_prefix_and_aborts_them():
+    jobs = JobRunner()
+    started = threading.Event()
+    seen = []
+
+    def slow(on_progress=None):
+        started.set()
+        for i in range(200):
+            time.sleep(0.01)
+            on_progress(i + 1, 200)
+            seen.append(i)
+        return "old settings"
+
+    jobs.submit(("smart", 1), _plain, 1)
+    _wait(jobs, ("smart", 1))
+    jobs.submit(("lab_smart", "old"), slow)
+    started.wait(5)
+    jobs.submit(("lab_smart", "older"), _plain, 5)  # queued behind the running one
+    jobs.forget(("lab_smart",))
+    assert not jobs.has(("lab_smart", "old")) and not jobs.has(("lab_smart", "older"))
+    jobs.submit(("lab_smart", "new"), _plain, 7)
+    assert _wait(jobs, ("lab_smart", "new"), timeout=5) == 14  # not stuck behind the old run
+    assert len(seen) < 200
+    assert jobs.result(("smart", 1)) == 2  # other prefixes are kept

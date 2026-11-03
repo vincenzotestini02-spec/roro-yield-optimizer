@@ -9,8 +9,8 @@ import streamlit as st
 
 from app.deck_chart import deck_figure
 from app.stability_view import ship_figure
-from app.state import ADVISOR_K, get_jobs, get_session, new_game, reveal_best, set_stage
-from roro_yield.advisor import SMART_LABEL, smart_plan
+from app.state import get_jobs, get_session, new_game, reveal_best, set_stage, start_game_smart
+from roro_yield.advisor import SMART_LABEL
 from roro_yield.explain import costly_decisions
 from roro_yield.fcfs import FCFS_LABEL, solve_fcfs
 from roro_yield.kpis import evaluate, plan_ballast, yield_delta_pct
@@ -57,10 +57,11 @@ def _smart_progress(seed: int) -> None:
     st.progress(frac, text=f"The smart planner is playing the same requests without foresight… {frac:.0%}")
 
 
-def _advisor_rows(game, seed: int) -> tuple[list[list], int]:
+def _advisor_rows(game, seed: int) -> tuple[list[list], int, set[int]]:
+    """Table rows, the number of verdicts still pending, and the K values the verdicts used."""
     jobs = get_jobs()
     actions = {booking_id: action for booking_id, action, _ in game.log}
-    rows, pending = [], 0
+    rows, pending, ks = [], 0, set()
     for i, b in enumerate(game.queue):
         you = {"accepted": "accept", "rejected": "reject"}.get(actions.get(b.id), "—")
         key = ("verdict", seed, i)
@@ -73,39 +74,48 @@ def _advisor_rows(game, seed: int) -> tuple[list[list], int]:
             advisor, futures, gain, mark = "n/a", "", "", ""
         else:
             advisor = ("accept" if v.accept else "reject") + ("" if v.feasible else " (doesn't fit)")
+            if v.feasible and v.k > 0:  # an infeasible verdict solves nothing (k = 0)
+                ks.add(v.k)
             futures = f"{v.n_pays_off}/{v.k}" if v.feasible else ""
             gain = f"€{v.expected_gain_eur:,.0f}" if v.feasible else ""
             mark = "✗" if you in ("accept", "reject") and you != advisor.split()[0] else ""
         request = (f"{b.customer} · {UNIT_LABELS.get(b.unit_type, b.unit_type)} {b.length_m:.1f} m · "
                    f"€{b.rate_per_m:.0f}/m")
         rows.append([i + 1, request, you, advisor, futures, gain, mark])
-    return rows, pending
+    return rows, pending, ks
 
 
-def _advisor_table(rows: list[list]) -> None:
+def _k_text(ks: set[int]) -> str:
+    """'K = 20 sampled futures' from the verdicts actually shown (several values if they differ)."""
+    if not ks:
+        return "sampled futures"
+    return "K = " + " / ".join(str(k) for k in sorted(ks)) + " sampled futures"
+
+
+def _advisor_table(rows: list[list], ks: set[int]) -> None:
     st.dataframe(pd.DataFrame(rows, columns=TABLE_COLUMNS), hide_index=True, width="stretch")
-    st.caption(f"✗ = you and the advisor disagreed · verdicts use K = {ADVISOR_K} sampled futures, "
+    st.caption(f"✗ = you and the advisor disagreed · verdicts use {_k_text(ks)}, "
                "knowing only the demand distribution, never the requests still to come.")
 
 
 @st.fragment(run_every=POLL_S)
 def _advisor_waiting(seed: int) -> None:
-    rows, pending = _advisor_rows(get_session(), seed)
+    rows, pending, ks = _advisor_rows(get_session(), seed)
     if not pending:
         st.rerun()  # done: redraw the page without the polling fragment
     n = len(rows)
     st.progress((n - pending) / n if n else 1.0,
                 text=f"The advisor is judging your decisions: {n - pending} of {n} verdicts ready")
-    _advisor_table(rows)
+    _advisor_table(rows, ks)
 
 
 def _advisor_section(game, seed: int) -> None:
     st.markdown("#### You vs the advisor, request by request")
-    rows, pending = _advisor_rows(game, seed)
+    rows, pending, ks = _advisor_rows(game, seed)
     if pending:
         _advisor_waiting(seed)
     else:
-        _advisor_table(rows)
+        _advisor_table(rows, ks)
 
 
 def render() -> None:
@@ -114,7 +124,7 @@ def render() -> None:
     seed = st.session_state["seed"]
     jobs = get_jobs()
     smart_key = ("smart", seed)
-    jobs.submit(smart_key, smart_plan, s, game.params, ADVISOR_K)  # no-op unless it was lost
+    start_game_smart(seed, s, game.params)  # no-op unless it was lost (or another session ran it)
     fcfs, you = solve_fcfs(s), game.to_plan()
     k_fcfs, k_you = evaluate(s, fcfs), evaluate(s, you)
     smart_result = jobs.result(smart_key)
@@ -135,7 +145,7 @@ def render() -> None:
     else:
         smart = None if smart_failed else smart_result[0]
         with st.spinner("Computing the best possible plan…"):
-            best = reveal_best(seed, s, smart)
+            best = reveal_best(seed, s, you, smart)
         k_best = evaluate(s, best)
         if smart is None:
             _waiting_card(cols[2], SMART_LABEL, "Unavailable for this sailing.")

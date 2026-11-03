@@ -40,6 +40,8 @@ def _controls() -> ScenarioParams:
     trim = st.slider("Max trim (m)", 0.1, 2.0, d.max_trim_m, 0.05, key="lab_trim")
     tank = st.slider("Ballast tank capacity (t per tank)", 0.0, 600.0, d.ballast_tank_cap_t, 10.0, key="lab_tank")
     ballast_cost = st.slider("Ballast cost (€/t)", 0.0, 30.0, d.ballast_cost_per_t, 0.5, key="lab_ballast_cost")
+    st.caption("Hull constants (displacement, GM, tank arms) are fixed at the default ferry's values; "
+               "only the end-tank arm follows the lane length (0.4 × lane length).")
     seed = st.number_input("Random seed", 1, 10_000, d.seed, key="lab_seed")
     return ScenarioParams(
         n_requests=n, contract_share=share, n_lanes=lanes, lane_length_m=lane_len, max_dwt_t=dwt,
@@ -74,7 +76,7 @@ def _smart_progress(params: ScenarioParams) -> None:
     if jobs.result(key) is not None or jobs.error(key) is not None or not jobs.has(key):
         st.rerun()
     frac = jobs.progress(key)
-    note = "" if frac else " (queued behind the game's background run)"
+    note = "" if frac else " (queued behind other background work)"
     st.progress(frac, text=f"The smart planner is playing this sailing… {frac:.0%}{note}")
 
 

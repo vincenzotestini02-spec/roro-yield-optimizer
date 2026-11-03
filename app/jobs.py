@@ -14,6 +14,9 @@ Keys are tuples such as ("smart", seed) or ("verdict", seed, index).
   game starts a new deck. Only the deterministic smart run of `seed` survives. Queued jobs are
   cancelled; a running job that reports progress is aborted at its next progress call, so a new
   seed's smart run is never stuck behind an old one.
+- `forget(prefix)` is the opposite: it drops every job whose key DOES start with `prefix`, with the
+  same cancel/abort rules. The Lab calls `forget(("lab_smart",))` before a new Lab smart run, so
+  a run for old slider settings never blocks the one just asked for.
 - `with paused():` holds progress-reporting jobs at their next progress call, so a verdict the UI
   computes synchronously does not share the CPU (and the GIL) with the background smart run.
 """
@@ -147,11 +150,17 @@ class JobRunner:
             return 1.0
         return job.progress
 
-    def forget_except(self, prefix: tuple) -> None:
-        n = len(prefix)
+    def _drop_where(self, condition: Callable[[tuple], bool]) -> None:
         with self._lock:
-            drop = [k for k in self._jobs if tuple(k[:n]) != tuple(prefix)]
-            for k in drop:
+            for k in [k for k in self._jobs if condition(k)]:
                 job = self._jobs.pop(k)
-                job.forgotten.set()
-                job.future.cancel()
+                job.forgotten.set()  # a running progress job aborts at its next progress call
+                job.future.cancel()  # a queued job never starts
+
+    def forget_except(self, prefix: tuple) -> None:
+        n, prefix = len(prefix), tuple(prefix)
+        self._drop_where(lambda k: tuple(k[:n]) != prefix)
+
+    def forget(self, prefix: tuple) -> None:
+        n, prefix = len(prefix), tuple(prefix)
+        self._drop_where(lambda k: tuple(k[:n]) == prefix)

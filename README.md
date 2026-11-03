@@ -19,7 +19,7 @@ The question is which bookings to accept, and where to put them, so the sailing 
 
 1. **① Play.** 60 booking requests arrive one by one for tomorrow's sailing (MV Nordic Bridge, Esbjerg → Immingham, 6 lanes × 120 m, each lane split into 4 zones from stern to bow). Accept or reject each, and choose **"🤖 App places them"** or **"✋ I place them"** (you pick the zone). Switch on **"💡 Advisor"** to see a verdict on every request. The deck drawing and the gauges (lane-metres, deadweight, reefer plugs, contract metres, margin, heel, trim, ballast) update live. Units that do not fit or would break the stability limits are refused, and you are warned when the contract guarantee is at risk.
 2. **② Reveal.** Four contenders side by side: **You**, **First come, first served**, **Smart planner (no foresight)** and **Best possible (perfect foresight)**, with their decks drawn, an advisor table for your decisions, and the few decisions that cost you the most, each with a one-line reason.
-3. **③ Lab.** Change the rules with sliders (number of requests, contract share, spot price level, guaranteed contract metres, lanes, lane length, deadweight, reefer plugs, lashing gap, random seed) and watch the optimizer, FCFS and the smart planner re-plan. The stability limits (max heel, max trim, ballast tank capacity, ballast cost) are sliders too. Download the loading manifest as CSV.
+3. **③ Lab.** Change the rules with sliders (number of requests, contract share, spot price level, guaranteed contract metres, lanes, lane length, deadweight, reefer plugs, lashing gap, random seed) and watch the optimizer and FCFS re-plan; the smart planner runs on demand, with a button, because it takes a while. The stability limits (max heel, max trim, ballast tank capacity, ballast cost) are sliders too. Download the loading manifest as CSV.
 
 ![The v2 reveal: decks of FCFS, the smart planner and the optimizer on one sailing (seed 3)](docs/img/v2-reveal.png)
 
@@ -52,7 +52,7 @@ $$
 
 where $m_i$ is the booking's margin (length × rate + reefer fee − handling cost), $L_i$ its length, $w_i$ its weight, $Z_s$ the length of zone $s$, $p$ the penalty per missing contract metre (€200/m by default) and $c_b$ the ballast cost (€5/t by default).
 
-It is solved with **HiGHS** (open source) through PuLP. A 3-second time limit keeps the app responsive, and the MILP is warm-started from the better of FCFS and any supplied plan, so the benchmark is never worse than the plans it is compared with. The optimizer sees the whole booking queue in advance, so it is labelled *"Best possible (perfect foresight)"*: a benchmark, not an online decision rule.
+It is solved with **HiGHS** (open source) through PuLP. A 3-second time limit keeps the app responsive, and the MILP is warm-started from the best of FCFS and the other plans on screen (yours and the smart planner's in the Reveal), so the benchmark is never worse than the plans it is compared with. The optimizer sees the whole booking queue in advance, so it is labelled *"Best possible (perfect foresight)"*: a benchmark, not an online decision rule.
 
 | KPI | Meaning |
 |---|---|
@@ -60,7 +60,7 @@ It is solved with **HiGHS** (open source) through PuLP. A 3-second time limit ke
 | Margin | Revenue − handling cost of the accepted units |
 | RevPAL | Revenue per available lane-metre |
 | Deck utilisation | Lane-metres used (incl. lashing gaps) / total lane-metres |
-| Deadweight used | Cargo weight / maximum cargo deadweight |
+| Deadweight used | (Cargo + ballast) / maximum deadweight |
 | Reefer plugs | Refrigerated units loaded / plugs on board |
 | Contract shortfall | Metres of contract cargo missing below the guarantee |
 | Ballast | Tonnes of water ballast the plan needs, and its cost (€5/t by default) |
@@ -86,14 +86,14 @@ The setting follows the formulations compared in Thomsen, Levinsen, Pacino & Rei
 
 The optimizer sees every booking before it decides, which no real planner can. The **smart planner** (also behind the in-game **💡 Advisor**) decides one request at a time, using only what a real planner would know:
 
-- **Information set:** the current request, all past requests (accepted or not), its own deck, "request k of n", and the demand distribution (`ScenarioParams`). It is never given the bookings still to come.
+- **Information set:** the current request, all past requests (accepted or not), its own deck, "request k of n", and the demand distribution (`ScenarioParams`). It is never given the bookings still to come, and the parameters it gets carry a neutral random seed, so it cannot regenerate this sailing either; its own sampling seed is a one-way hash of the game seed.
 - **K sampled futures:** for the current request it samples K possible rest-of-sailing demand streams from that distribution (K = 20 by default; the app reads `RORO_ADVISOR_K`).
 - **LP relaxation:** in each future it solves two LP relaxations of the model above with the deck's loads fixed: (a) the current unit loaded where the auto-placement rule puts it, (b) the unit rejected. The difference is that future's gain.
 - **Accept rule:** accept if and only if the mean gain over the K futures is positive and the unit can be loaded. A request that cannot be loaded is refused without solving anything.
 
 The idea is the one behind slot-allocation revenue management in liner shipping: keep space for cargo that is likely to pay more later (Zurheide & Fischer, "A revenue management slot allocation model for liner shipping networks", *Maritime Economics & Logistics* 14, 2012; see also Main, "Optimizing Roll-on/Roll-off Stowage Planning", PhD thesis, DTU, 2024).
 
-**Does it help?** On seeds 1 to 10 at K = 10 the smart planner averaged a score of 43,499 against 40,030 for FCFS, about +8.7%, but it lost to FCFS on 2 of those 10 sailings. It only knows the demand distribution, not this sailing's future, so a single unlucky sailing can go against it; the advantage shows on average. One advisor verdict takes roughly 0.7 to 1.2 s locally.
+**Does it help?** On seeds 1 to 10 at K = 10 the smart planner averaged a score of 43,681 against 40,431 for FCFS, about +8.0%, but it lost to FCFS on 1 of those 10 sailings. It only knows the demand distribution, not this sailing's future, so a single unlucky sailing can go against it; the advantage shows on average. One advisor verdict takes roughly 0.7 to 1.2 s locally.
 
 ## Academic grounding
 
