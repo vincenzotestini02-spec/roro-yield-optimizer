@@ -13,7 +13,7 @@ class GameSession:
         self.scenario = scenario
         self.queue = sorted(scenario.bookings, key=lambda b: b.arrival)
         self.index = 0
-        self.deck = DeckState(scenario)
+        self.deck = DeckState(scenario.vessel)
         self.log: list[tuple[str, str]] = []
 
     @property

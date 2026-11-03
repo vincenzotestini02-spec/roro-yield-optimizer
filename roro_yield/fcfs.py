@@ -9,11 +9,11 @@ FCFS_LABEL = "First come, first served"
 
 
 def solve_fcfs(scenario: Scenario) -> Plan:
-    deck = DeckState(scenario)
+    deck = DeckState(scenario.vessel)
     rejected = []
     for b in sorted(scenario.bookings, key=lambda b: b.arrival):
         if deck.why_not(b) is None:
             deck.place(b)
         else:
             rejected.append(b.id)
-    return Plan(FCFS_LABEL, dict(deck.placements), rejected)
+    return Plan(FCFS_LABEL, deck.placements, rejected)

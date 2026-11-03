@@ -69,3 +69,15 @@ def test_default_scenario_unchanged_floor():
         s = generate_scenario(ScenarioParams(seed=seed))
         contract_m = sum(b.length_m for b in s.bookings if b.segment == "contract")
         assert s.contract_floor_m == min(0.35 * 720, contract_m)
+
+
+def test_ballast_starboard_and_aft_branches():
+    stab = replace(STAB, side_tank_arm_m=9.0, end_tank_arm_m=50.0)
+    m_t = -(stab.heel_limit_tm + 900)  # port-heavy -> starboard tank
+    b = required_ballast(m_t, 0, stab)
+    assert b.stbd_t == pytest.approx(100) and b.port_t == 0
+    assert residual_heel_deg(m_t, b, stab) == pytest.approx(-stab.max_heel_deg, abs=1e-9)
+    m_l = stab.trim_limit_tm + 500  # bow-heavy -> aft tank
+    b = required_ballast(0, m_l, stab)
+    assert b.aft_t == pytest.approx(10) and b.fore_t == 0
+    assert residual_trim_m(m_l, b, stab) == pytest.approx(stab.max_trim_m)
