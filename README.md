@@ -56,7 +56,7 @@ It is solved with **HiGHS** (open source) through PuLP. A 3-second time limit ke
 
 | KPI | Meaning |
 |---|---|
-| Score | Margin − contract-shortfall penalty (the number every method competes on) |
+| Score | Margin − contract-shortfall penalty − ballast cost (the number every method competes on) |
 | Margin | Revenue − handling cost of the accepted units |
 | RevPAL | Revenue per available lane-metre |
 | Deck utilisation | Lane-metres used (incl. lashing gaps) / total lane-metres |
@@ -68,7 +68,7 @@ It is solved with **HiGHS** (open source) through PuLP. A 3-second time limit ke
 | Trim | Residual bow/stern difference in metres after ballast (limit 0.5 m by default) |
 | Yield vs FCFS | % gain of the score over first come, first served |
 
-![The Lab: change the rules and re-plan](docs/img/lab.png)
+![The v1 Lab (screenshot from v1; v2 adds stability sliders and the smart planner)](docs/img/lab.png)
 
 ## Stability
 
@@ -76,7 +76,7 @@ Cargo weight sitting off-centre makes the ship list (heel) or sit bow-down or st
 
 - **Model.** Each unit's weight times its position gives a transverse moment (lane offset from the centreline) and a longitudinal moment (zone position from midships). Residual heel is `atan(net moment / (displacement × GM))` and residual trim is `net moment / (MTC × 100)`. Defaults: displacement 8,000 t, GM 1.5 m, MTC 100 t·m/cm.
 - **Limits.** Max heel **2.0°** and max trim **0.5 m** after ballast, both adjustable in the Lab.
-- **Ballast.** Four tanks (port, starboard, fore, aft), 300 t each, €5/t. For any plan the minimum ballast is closed form: the part of each moment above its limit, divided by the tank's lever arm (9 m for the side tanks, 48 m for the end tanks), goes into the tank on the light side. The same rule scores every method, so no method gets cheaper ballast than another. A plan is infeasible if that ballast exceeds a tank's capacity or pushes cargo plus ballast above the deadweight limit.
+- **Ballast.** Four tanks (port, starboard, fore, aft), 300 t each, €5/t. For any plan the minimum ballast is closed form: the part of each moment above its limit, divided by the tank's lever arm (by default 9 m for the side tanks and 0.4 × lane length, i.e. 48 m, for the end tanks), goes into the tank on the light side. The same rule scores every method, so no method gets cheaper ballast than another. A plan is infeasible if that ballast exceeds a tank's capacity or pushes cargo plus ballast above the deadweight limit.
 
 **Honest disclaimer:** this stability model is linear and simplified. It is a teaching model, not a class-approved loading computer, and it does not replace one.
 
