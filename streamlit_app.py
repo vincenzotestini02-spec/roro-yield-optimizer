@@ -10,7 +10,8 @@ STEPS = {"game": "① Play", "reveal": "② Reveal", "lab": "③ Lab"}
 st.title("🚢 RoRo Yield Optimizer")
 st.markdown(
     "**Can you load a Ro-Ro ferry better than an algorithm?** Ferry space is perishable: once the ship sails, "
-    "an empty lane-metre is lost revenue. Play the booking planner, then see what a MILP optimizer would have done."
+    "an empty lane-metre is lost revenue. Play the booking planner while keeping the ship stable (heel, trim, ballast), "
+    "then see what first come, first served, a smart planner with no foresight and a MILP optimizer would have done."
 )
 st.caption("Synthetic but realistic data — not DFDS data.")
 
