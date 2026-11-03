@@ -91,15 +91,6 @@ def deck_figure(
             f"<br>€{b.rate_per_m:.0f}/m · margin €{b.margin:,.0f}"
         )
 
-    if hl_x:
-        # One invisible clickable marker per highlighted slot; customdata is the slot id ("L3-Z2").
-        fig.add_trace(go.Scatter(
-            x=hl_x, y=hl_y, mode="markers", name="Free zones", showlegend=False,
-            customdata=hl_id, hoverinfo="skip",
-            marker=dict(size=34, color="rgba(0,0,0,0)", symbol="square"),
-            selected=dict(marker=dict(opacity=1)), unselected=dict(marker=dict(opacity=1)),
-        ))
-
     for seg, h in hover.items():
         if not h["x"]:
             continue
@@ -112,6 +103,15 @@ def deck_figure(
         fig.add_trace(go.Scatter(
             x=[None], y=[None], mode="markers", name=SEGMENT_NAMES[seg], legendgroup=seg,
             marker=dict(size=12, color=SEGMENT_COLORS[seg], symbol="square"), hoverinfo="skip",
+        ))
+
+    if hl_x:
+        # One invisible clickable marker per highlighted slot; customdata is the slot id ("L3-Z2").
+        fig.add_trace(go.Scatter(
+            x=hl_x, y=hl_y, mode="markers", name="Free zones", showlegend=False,
+            customdata=hl_id, hoverinfo="none",
+            marker=dict(size=34, color="rgba(0,0,0,0)", symbol="square"),
+            selected=dict(marker=dict(opacity=1)), unselected=dict(marker=dict(opacity=1)),
         ))
 
     fig.update_layout(

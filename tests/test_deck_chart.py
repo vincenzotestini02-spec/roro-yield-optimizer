@@ -77,6 +77,8 @@ def test_highlight_markers_have_slot_customdata():
     assert len(traces[0].x) == 2
     assert len(_shapes(fig, "highlight:")) == 2
     assert all("45, 164, 78" in sh.fillcolor or "2da44e" in sh.fillcolor for sh in _shapes(fig, "highlight:"))
+    assert traces[0].hoverinfo == "none"
+    assert fig.data[-1] is traces[0]  # on top of the unit hover markers
     assert not [t for t in deck_figure(s, Plan("x", {}, [])).data if t.customdata is not None]
 
 

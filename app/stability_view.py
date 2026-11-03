@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from roro_yield.models import Stability
+from roro_yield.models import DEFAULT_STABILITY, Stability
 from roro_yield.stability import Ballast
 
 VISUAL_EXAGGERATION = 4
@@ -35,18 +35,30 @@ def _meter(value: float, limit: float) -> str:
     )
 
 
+def _heel_text(heel_deg: float) -> str:
+    if round(heel_deg, 1) == 0:
+        return "upright"
+    return f"{abs(heel_deg):.1f}° " + ("to starboard" if heel_deg > 0 else "to port")
+
+
+def _trim_text(trim_m: float) -> str:
+    if round(trim_m, 2) == 0:
+        return "even keel"
+    return f"{abs(trim_m):.2f} m " + ("by the bow" if trim_m > 0 else "by the stern")
+
+
 def stability_gauges(
     heel_deg: float, trim_m: float, ballast_t: float, stab: Stability, max_dwt_t: float
 ) -> None:
-    heel_side = "to starboard" if heel_deg > 0 else "to port"
-    trim_side = "by the bow" if trim_m > 0 else "by the stern"
+    heel_txt = _heel_text(heel_deg)
+    trim_txt = _trim_text(trim_m)
     st.markdown(
-        f"**Heel** (left/right): {abs(heel_deg):.1f}° {heel_side} (limit {stab.max_heel_deg:.1f}°)"
+        f"**Heel** (left/right): {heel_txt} (limit {stab.max_heel_deg:.1f}°)"
         + _meter(heel_deg, stab.max_heel_deg),
         unsafe_allow_html=True,
     )
     st.markdown(
-        f"**Trim** (bow/stern): {abs(trim_m):.2f} m {trim_side} (limit {stab.max_trim_m:.2f} m)"
+        f"**Trim** (bow/stern): {trim_txt} (limit {stab.max_trim_m:.2f} m)"
         + _meter(trim_m, stab.max_trim_m),
         unsafe_allow_html=True,
     )
@@ -68,12 +80,12 @@ def _rect(x0: float, x1: float, y0: float, y1: float) -> list[tuple[float, float
     return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
 
 
-def ship_figure(heel_deg: float, trim_m: float, ballast: Ballast, tank_cap_t: float = 300.0) -> go.Figure:
+def ship_figure(heel_deg: float, trim_m: float, ballast: Ballast, tank_cap_t: float = DEFAULT_STABILITY.tank_cap_t) -> go.Figure:
     """Astern view (heel) and side view (trim); starboard right / bow right. Angles drawn x4."""
     heel_rot = -heel_deg * VISUAL_EXAGGERATION  # starboard down = clockwise
     trim_rot = -math.degrees(math.atan(trim_m / TRIM_ARM_M)) * VISUAL_EXAGGERATION  # bow down = clockwise
-    heel_txt = f"heel {abs(heel_deg):.1f}° " + ("to starboard" if heel_deg > 0 else "to port")
-    trim_txt = f"trim {abs(trim_m):.2f} m " + ("by the bow" if trim_m > 0 else "by the stern")
+    heel_txt = "heel: " + _heel_text(heel_deg)
+    trim_txt = "trim: " + _trim_text(trim_m)
 
     fig = make_subplots(rows=1, cols=2, column_widths=[0.45, 0.55], horizontal_spacing=0.06,
                         subplot_titles=(f"Seen from astern: {heel_txt}", f"Seen from the side: {trim_txt}"))
