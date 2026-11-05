@@ -1,6 +1,6 @@
 import pytest
 
-from roro_yield.models import UNIT_TYPES, Booking, Lane, Plan, Scenario, Vessel
+from roro_yield.models import UNIT_TYPES, Booking, Lane, Plan, Scenario, Slot, Vessel
 
 
 def make_vessel():
@@ -34,5 +34,18 @@ def test_scenario_lookup_and_plan_accepted_ids():
     b = Booking("B1", 0, "spot", "H", "van", 6.5, 3.0, False, 90.0, 0.0, 84.5)
     s = Scenario(make_vessel(), (b,), 0.0, 200.0)
     assert s.booking("B1") is b
-    plan = Plan("You", {"B1": "L1"}, [])
+    plan = Plan("You", {"B1": Slot("L1", 0)}, [])
     assert plan.accepted_ids == ["B1"]
+
+
+def test_slot_str_and_vessel_slots():
+    assert str(Slot("L3", 2)) == "L3-Z2"
+    v = make_vessel()
+    assert len(v.slots) == 24
+    assert v.lane("L2").id == "L2"
+
+
+def test_scenario_floor_capped_by_requested_contract_metres():
+    b = Booking("B1", 0, "contract", "KA", "van", 6.5, 3.0, False, 50.0, 0.0, 84.5)
+    s = Scenario(make_vessel(), (b,), 252.0, 200.0)
+    assert s.contract_floor_m == 6.5

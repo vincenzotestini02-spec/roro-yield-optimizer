@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .models import Plan, Scenario
+from .stability import Ballast, moments, required_ballast, residual_heel_deg, residual_trim_m
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,17 @@ class Kpis:
     dwt_pct: float
     plugs_used: int
     contract_m: float
+    ballast_t: float = 0.0
+    ballast_cost: float = 0.0
+    heel_deg: float = 0.0
+    trim_m: float = 0.0
+
+
+def plan_ballast(scenario: Scenario, plan: Plan) -> tuple[Ballast, tuple[float, float]]:
+    """Closed-form minimum ballast for a plan, and its (M_T, M_L) moments."""
+    loads = [(scenario.booking(i), slot) for i, slot in plan.placements.items()]
+    m = moments(loads, scenario.vessel)
+    return required_ballast(*m, scenario.vessel.stability), m
 
 
 def evaluate(scenario: Scenario, plan: Plan) -> Kpis:
@@ -34,6 +46,9 @@ def evaluate(scenario: Scenario, plan: Plan) -> Kpis:
     total_m = vessel.total_lane_m
     used_m = sum(b.effective_length(vessel.lashing_gap_m) for b in accepted)
     weight = sum(b.weight_t for b in accepted)
+    stab = vessel.stability
+    ballast, (m_t, m_l) = plan_ballast(scenario, plan)
+    ballast_cost = stab.ballast_cost_per_t * ballast.total_t
     return Kpis(
         method=plan.method,
         n_accepted=len(accepted),
@@ -41,17 +56,21 @@ def evaluate(scenario: Scenario, plan: Plan) -> Kpis:
         margin=margin,
         shortfall_m=shortfall,
         penalty=penalty,
-        objective=margin - penalty,
+        objective=margin - penalty - ballast_cost,
         revpal=revenue / total_m if total_m > 0 else 0.0,
         deck_util_pct=used_m / total_m * 100 if total_m > 0 else 0.0,
-        dwt_pct=weight / vessel.max_dwt_t * 100 if vessel.max_dwt_t > 0 else 0.0,
+        dwt_pct=(weight + ballast.total_t) / vessel.max_dwt_t * 100 if vessel.max_dwt_t > 0 else 0.0,
         plugs_used=sum(b.is_reefer for b in accepted),
         contract_m=contract_m,
+        ballast_t=ballast.total_t,
+        ballast_cost=ballast_cost,
+        heel_deg=residual_heel_deg(m_t, ballast, stab),
+        trim_m=residual_trim_m(m_l, ballast, stab),
     )
 
 
 def objective(scenario: Scenario, plan: Plan) -> float:
-    """Margin minus contract-shortfall penalty: the number every method competes on."""
+    """Margin minus shortfall penalty minus ballast cost: the number every method competes on."""
     return evaluate(scenario, plan).objective
 
 

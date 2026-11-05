@@ -1,7 +1,9 @@
 from statistics import mean
 
+import numpy as np
+
 from roro_yield.models import UNIT_TYPES
-from roro_yield.simulator import ScenarioParams, generate_scenario
+from roro_yield.simulator import ScenarioParams, expected_contract_m, generate_scenario, sample_future
 
 
 def test_same_seed_same_scenario():
@@ -70,3 +72,56 @@ def test_spot_rate_multiplier_scales_spot_rates():
     for a, b in zip(base.bookings, high.bookings):
         if a.segment == "spot":
             assert b.rate_per_m == a.rate_per_m * 1.5
+
+
+def test_arrival_frac_sorted_and_stability_from_params():
+    s = generate_scenario(ScenarioParams(max_heel_deg=1.0, ballast_tank_cap_t=50.0, lane_length_m=100.0))
+    fracs = [b.arrival_frac for b in s.bookings]
+    assert fracs == sorted(fracs) and all(0 <= f <= 1 for f in fracs)
+    st = s.vessel.stability
+    assert (st.max_heel_deg, st.tank_cap_t, st.end_tank_arm_m) == (1.0, 50.0, 40.0)
+
+
+def test_generate_scenario_unchanged():
+    # Snapshot taken from tag v1.0 (pre-refactor), seed 42.
+    s = generate_scenario(ScenarioParams(seed=42))
+    bs = s.bookings
+    assert len(bs) == 60
+    snap = [(0, "B001", 45.83, 13.1), (1, "B002", 49.22, 2.4), (2, "B003", 46.0, 24.9),
+            (58, "B059", 122.33, 11.8), (59, "B060", 122.04, 10.9)]
+    for i, bid, rate, weight in snap:
+        assert (bs[i].id, bs[i].rate_per_m, bs[i].weight_t) == (bid, rate, weight)
+
+
+def test_sample_future_respects_after_frac():
+    p = ScenarioParams()
+    fut = sample_future(p, 0.5, 20, np.random.default_rng(1))
+    assert len(fut) == 20
+    assert all(b.arrival_frac > 0.5 for b in fut)
+    assert [b.arrival_frac for b in fut] == sorted(b.arrival_frac for b in fut)
+    assert [b.id for b in fut] == [f"F{i:03d}" for i in range(1, 21)]
+
+
+def test_sample_future_late_has_no_contract():
+    fut = sample_future(ScenarioParams(), 0.75, 30, np.random.default_rng(2))
+    assert fut and all(b.segment == "spot" for b in fut)
+
+
+def test_sample_future_empty_cases():
+    p = ScenarioParams()
+    assert sample_future(p, 0.3, 0, np.random.default_rng(0)) == []
+    assert sample_future(p, 1.0, 10, np.random.default_rng(0)) == []
+
+
+def test_sample_future_deterministic():
+    p = ScenarioParams()
+    a = sample_future(p, 0.3, 15, np.random.default_rng(7))
+    b = sample_future(p, 0.3, 15, np.random.default_rng(7))
+    assert a == b
+
+
+def test_expected_contract_monotone():
+    p = ScenarioParams()
+    vals = [expected_contract_m(p, f, 20) for f in (0.0, 0.3, 0.6, 0.8)]
+    assert vals == sorted(vals, reverse=True)
+    assert vals[0] > 0 and vals[-1] == 0

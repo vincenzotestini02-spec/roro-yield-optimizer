@@ -29,3 +29,15 @@ You only do this once, at the end. It takes about 10 minutes.
 ## Updating later
 
 Every `git push` to `main` updates the live app automatically.
+
+## Second app for v2
+
+v2 lives on the `v2` branch and runs as its own app, next to the v1 app.
+
+1. Go to <https://share.streamlit.io> and click **Create app** → **Deploy a public app from GitHub**.
+2. Repository: the same repo (`YOUR-USERNAME/roro-yield-optimizer`) · Branch: **`v2`** · Main file path: `streamlit_app.py`.
+3. **Advanced settings** → Python version **3.11**.
+4. Suggested URL: `roro-yield-optimizer-v2.streamlit.app`.
+5. Click **Deploy**.
+
+After the first load, send the URL back so the advisor verdict and the Reveal wait can be timed on the live host. The target is about 1.5 s per advisor verdict; if it is slower, the options are a lower `RORO_ADVISOR_K` or a paid host, to be decided before any spend.
