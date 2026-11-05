@@ -4,7 +4,8 @@ The advisor sees only a `PolicyView`: the current request, every past request (a
 not), a copy of its own deck, "request k of n" and the demand distribution (`ScenarioParams`).
 It never receives a `Scenario`, so it cannot read the bookings still to come. The boundary is
 structural: the view's `params` carry a neutral seed (so `ScenarioParams` cannot rebuild this
-sailing), and the advisor's own sampling seed is a one-way hash of the game seed.
+sailing), and the advisor's own sampling seed is a hash of the game seed. The hash only keeps the
+two seeds apart in code: game seeds are small, so it is separation, not secrecy.
 
 For each of K sampled futures it solves two LP relaxations of the §5.2 model with the deck's
 loads fixed: (a) the current unit loaded where the auto-placement rule puts it, (b) rejected.
@@ -31,9 +32,10 @@ NEUTRAL_SEED = 0  # the seed the advisor's ScenarioParams carry: never the game'
 
 
 def advisor_rng_seed(game_seed: int) -> int:
-    """A stable seed for the advisor's sampling, derived one-way from the game seed.
+    """A stable seed for the advisor's sampling, hashed from the game seed.
 
-    Verdicts stay deterministic per game, but the advisor cannot regenerate the scenario.
+    Verdicts stay deterministic per game, and the advisor never handles the game seed itself.
+    This is separation, not secrecy: the seed space is small enough to enumerate.
     """
     digest = hashlib.sha256(f"advisor:{game_seed}".encode()).digest()
     return int.from_bytes(digest[:8], "big")
