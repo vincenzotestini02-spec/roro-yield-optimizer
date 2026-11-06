@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+
+from server import game_api
 
 
 def create_app() -> FastAPI:
@@ -12,6 +15,11 @@ def create_app() -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.exception_handler(game_api.InvalidDecision)
+    def invalid_decision(_: Request, exc: game_api.InvalidDecision) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=422)
+
+    app.include_router(game_api.router)
     return app
 
 
