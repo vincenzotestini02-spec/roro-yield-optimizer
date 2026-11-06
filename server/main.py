@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from server import game_api, jobs_api, reveal_api
+from server import game_api, jobs_api, lab_api, reveal_api
 from server.jobs import QueueFull
 
 
@@ -27,6 +27,7 @@ def create_app() -> FastAPI:
     app.include_router(game_api.router)
     app.include_router(jobs_api.router)
     app.include_router(reveal_api.router)
+    app.include_router(lab_api.router)
     return app
 
 
