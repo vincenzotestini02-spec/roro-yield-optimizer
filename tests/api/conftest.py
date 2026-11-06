@@ -11,6 +11,11 @@ def client():
     return TestClient(create_app())
 
 
+@pytest.fixture
+def wait():
+    return wait_job
+
+
 def wait_job(client, job_id, timeout=30.0):
     end = time.monotonic() + timeout
     while time.monotonic() < end:

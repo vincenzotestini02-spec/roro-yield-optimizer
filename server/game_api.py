@@ -5,13 +5,15 @@ from __future__ import annotations
 from dataclasses import replace
 from functools import lru_cache
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
+from roro_yield.advisor import advise
 from roro_yield.game import GameSession
 from roro_yield.simulator import ScenarioParams, expected_contract_m, generate_scenario
-from server.config import GAME_PARAMS
+from server import jobs_api
+from server.config import ADVISOR_K, GAME_PARAMS
 from server.schemas import Decision, GameRequest
-from server.serialize import booking_out, deck_out, parse_slot
+from server.serialize import booking_out, deck_out, parse_slot, verdict_out
 
 router = APIRouter(prefix="/api/game")
 EXPECTED_SAMPLES = 40  # for the contract-floor warning only
@@ -78,3 +80,16 @@ def state_out(seed: int, session: GameSession) -> dict:
 @router.post("/state")
 def game_state(req: GameRequest) -> dict:
     return state_out(req.seed, replay(req.seed, req.decisions))
+
+
+def decisions_key(decisions: list[Decision]) -> tuple:
+    return tuple((d.booking_id, d.action, d.slot) for d in decisions)
+
+
+@router.post("/verdict")
+def game_verdict(req: GameRequest) -> dict:
+    session = replay(req.seed, req.decisions)
+    if session.is_finished:
+        raise HTTPException(409, "The game is finished: no request to judge.")
+    key = ("verdict", req.seed, decisions_key(req.decisions))
+    return {"job_id": jobs_api.submit(key, advise, session.view_at_current(), ADVISOR_K, output=verdict_out)}
