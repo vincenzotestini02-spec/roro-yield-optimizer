@@ -93,7 +93,15 @@ The optimizer sees every booking before it decides, which no real planner can. T
 
 The idea is the one behind slot-allocation revenue management in liner shipping: keep space for cargo that is likely to pay more later (Zurheide & Fischer, "A revenue management slot allocation model for liner shipping networks", *Maritime Economics & Logistics* 14, 2012; see also Main, "Optimizing Roll-on/Roll-off Stowage Planning", PhD thesis, DTU, 2024).
 
-**Does it help?** On seeds 1 to 10 at K = 10 the smart planner averaged a score of 43,681 against 40,431 for FCFS, about +8.0%, but it lost to FCFS on 1 of those 10 sailings. It only knows the demand distribution, not this sailing's future, so a single unlucky sailing can go against it; the advantage shows on average. One advisor verdict takes roughly 0.7 to 1.2 s locally.
+**Does it help?** It depends on how full the ship is. Mean score over 30 synthetic sailings per level, with K = 20, on the game's 600 lane-metre deck:
+
+| Demand | Requests | Demand / deck | FCFS | Smart planner | Vs FCFS | Lost to FCFS | Perfect foresight |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Low | 35 | 76% | 32,254 | 32,254 | 0.0% | 0 of 30 | 32,423 |
+| Normal | 50 | 108% | 35,070 | 36,874 | +5.1% | 4 of 30 | 41,321 |
+| High | 60 | 130% | 34,926 | 38,259 | +9.5% | 2 of 30 | 42,923 |
+
+Here the planner knows how many requests will arrive, which a real planner would not. A tighter deck raises the percentage gain, not total profit. It only knows the demand distribution, not this sailing's future, so a single sailing can go against it; the advantage shows on average.
 
 ## Academic grounding
 

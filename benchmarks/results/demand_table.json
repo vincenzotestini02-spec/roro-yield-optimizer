@@ -1,0 +1,46 @@
+{
+  "levels": [
+    {
+      "label": "low",
+      "n_requests": 35,
+      "demand_ratio": 0.7630888888888891,
+      "fcfs": 32253.908066666667,
+      "smart": 32253.908066666667,
+      "optimal": 32422.873066666667,
+      "smart_vs_fcfs_pct": 0.0,
+      "smart_vs_fcfs_se_eur": 0.0,
+      "lost_to_fcfs": 0,
+      "n_sailings": 30
+    },
+    {
+      "label": "normal",
+      "n_requests": 50,
+      "demand_ratio": 1.079355555555556,
+      "fcfs": 35070.42707347781,
+      "smart": 36874.090452777775,
+      "optimal": 41320.643361738905,
+      "smart_vs_fcfs_pct": 5.142975235291591,
+      "smart_vs_fcfs_se_eur": 383.6842974339873,
+      "lost_to_fcfs": 4,
+      "n_sailings": 30
+    },
+    {
+      "label": "high",
+      "n_requests": 60,
+      "demand_ratio": 1.2966555555555563,
+      "fcfs": 34925.93014910561,
+      "smart": 38258.713127181516,
+      "optimal": 42922.89618273707,
+      "smart_vs_fcfs_pct": 9.54243155113581,
+      "smart_vs_fcfs_se_eur": 435.85818374559864,
+      "lost_to_fcfs": 2,
+      "n_sailings": 30
+    }
+  ],
+  "k": 20,
+  "seeds": [
+    1,
+    30
+  ],
+  "generated_at": "2026-11-06T16:38:24+00:00"
+}
