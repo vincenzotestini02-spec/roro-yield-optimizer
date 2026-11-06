@@ -74,6 +74,8 @@ def state_out(seed: int, session: GameSession) -> dict:
         "best_slot": None if best is None else str(best),
         "cannot_load_reason": None if current is None else session.deck.why_not(current),
         "floor_at_risk": session.contract_floor_at_risk(),
+        "contract_floor_m": session.scenario.contract_floor_m,
+        "shortfall_penalty_per_m": session.scenario.shortfall_penalty_per_m,
     }
 
 

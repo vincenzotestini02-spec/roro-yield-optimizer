@@ -58,6 +58,8 @@ export interface GameState {
   best_slot: string | null
   cannot_load_reason: string | null
   floor_at_risk: boolean
+  contract_floor_m: number
+  shortfall_penalty_per_m: number
 }
 
 export interface Verdict {
