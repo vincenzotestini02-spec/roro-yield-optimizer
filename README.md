@@ -107,12 +107,33 @@ What it changes: the pseudo-revenue objective is replaced by real commercial mar
 ## Roadmap
 
 - **Done in v2:** stability (heel, trim, closed-form ballast, four zones per lane) and the online advisor (smart planner with no foresight).
-- **v3: web app.** A FastAPI back end and a React front end in place of Streamlit.
-- **Multi-deck and hazardous cargo.** Several decks, axle loads and dangerous-goods segregation, following *RoRo Ships Stowage Planning: Using a Novel MIP Model and Stability Constraints* and *A Two-Phase Stowage Approach for Passenger-Cargo RoRo Ship Based on 2D-KP Coping With Complex Rotation and Safe Navigation Constraints*.
-- **No-shows and overbooking.** Accept more than fits, knowing some bookings will not show up.
-- **Dynamic pricing.** Quote a price per request, in the spirit of *A Dynamic Pricing Model for a Maritime Transportation Service Provider*.
-- **Network.** Several sailings and routes at once, towards *Combined maritime fleet deployment and inventory management with port visit flexibility in roll-on roll-off shipping*.
-- **Real data.** Plug in historical booking streams instead of the synthetic generator.
+
+### v3: planner tool plus game
+
+v3 is a separate app with its own link; the Streamlit v2 app stays as it is.
+
+- **App:** a FastAPI back end and a React front end in one service, hosted on Hugging Face Spaces.
+- **Planner:** upload an Excel file of accepted bookings, all of them mandatory; get a first plan; assess each new request; re-plan while units are not yet on board.
+- **Game:** Game, Reveal and Lab stay. Units can be moved, and the Advisor suggests a move only when it earns more than its handling cost.
+- **Planning features:** broken stowage as a percentage, space reserved per customer, PDF export and shareable links, vessel presets, several discharge ports, and deck heights with deck and axle load limits.
+- **Advisor:** three answers (accept, reject, "your call") so it rejects only when the sampled futures clearly agree. A test compares sampled futures with an expected-value rule, in the spirit of Main (2024).
+- **Default deck:** 5 lanes of 120 m, shown as a high-demand sailing, next to results for low, normal and high demand.
+- **Demand forecast:** planner assumptions first; then a monthly demand level from public data (DFDS monthly volumes, UK port freight statistics, Eurostat), kept only if it beats a simple seasonal baseline; then models trained on a company's own booking history, starting with LightGBM. Sailing-level detail stays simulated, and labelled so, until real bookings are available.
+- **Cancellations and no-shows:** with company data, estimate which bookings will not sail, following Ränkeskog (2023), and show it as a risk indicator only.
+
+### Later, if it proves its value
+
+Each item is added only if it measurably beats the simpler version.
+
+- **Detailed deck model:** a grid with obstacles, ramps, routes and loading order, and rotations of up to seven ports.
+- **Heavier optimization:** continuous re-planning over scenarios, uncertain arrival times, and a HiGHS, Gurobi and heuristic comparison on large models.
+- **Advanced forecasting:** neural network ensembles for calibrated uncertainty, once real data exists.
+- **Commercial decisions:** overbooking and dynamic pricing, in the spirit of *A Dynamic Pricing Model for a Maritime Transportation Service Provider*.
+- **Reinforcement learning:** an agent trained on the simulator and compared with the classical methods.
+- **Validation:** thousands of simulated sailings, stress scenarios, statistical comparisons, and tests on real company data.
+- **Platform:** separate API, job queue, database and model versioning.
+- **Network:** several sailings and routes at once, towards *Combined maritime fleet deployment and inventory management with port visit flexibility in roll-on roll-off shipping*.
+- **More cargo rules:** several decks with axle loads and dangerous-goods segregation, following *RoRo Ships Stowage Planning: Using a Novel MIP Model and Stability Constraints* and *A Two-Phase Stowage Approach for Passenger-Cargo RoRo Ship Based on 2D-KP Coping With Complex Rotation and Safe Navigation Constraints*.
 
 ## Run locally
 
