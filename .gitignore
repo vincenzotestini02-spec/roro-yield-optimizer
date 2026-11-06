@@ -9,3 +9,5 @@ docs/papers/
 web/node_modules/
 web/dist/
 graphify-out/
+web/test-results/
+web/playwright-report/

@@ -41,3 +41,14 @@ v2 lives on the `v2` branch and runs as its own app, next to the v1 app.
 5. Click **Deploy**.
 
 After the first load, send the URL back so the advisor verdict and the Reveal wait can be timed on the live host. The target is about 1.5 s per advisor verdict; if it is slower, the options are a lower `RORO_ADVISOR_K` or a paid host, to be decided before any spend.
+
+## v3 on Hugging Face Spaces
+
+v3 runs as its own Docker Space. Nothing here touches the Streamlit apps.
+
+1. Create an account on <https://huggingface.co>.
+2. Open **New Space**, pick the **Docker** SDK with a blank template and the free **CPU basic** hardware.
+3. Create a token with write access under **Settings → Access Tokens**. Keep it private.
+4. From the repository root, in Git Bash, run `scripts/deploy_hf.sh https://huggingface.co/spaces/YOUR-USERNAME/YOUR-SPACE`. Use your username and the token when Git asks for a password.
+5. Follow the build in the Space's **Logs** tab. When it ends, `/api/health` answers `{"status":"ok"}`.
+6. Time the live app: `.venv/Scripts/python.exe -m benchmarks.measure_live https://YOUR-USERNAME-YOUR-SPACE.hf.space --verdicts 10`.

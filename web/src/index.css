@@ -91,7 +91,7 @@ footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--lin
 .progress > div { height: 100%; background: var(--accent); transition: width .3s; }
 
 .deck { width: 100%; height: auto; display: block; }
-.deck text { fill: var(--muted); font-size: 11px; }
+.deck text { fill: var(--muted); font-size: 17px; }
 .deck .lane { fill: var(--surface-2); stroke: var(--line); }
 .deck .zone-line { stroke: var(--line); stroke-dasharray: 3 3; }
 .deck .unit { stroke: var(--surface); stroke-width: 1; }
@@ -101,6 +101,7 @@ footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--lin
 .deck .pick:hover, .deck .pick:focus { fill-opacity: .42; outline: none; }
 
 .table-wrap { overflow-x: auto; }
+.table-scroll { max-height: 420px; overflow-y: auto; }
 table { border-collapse: collapse; width: 100%; font-size: .9rem; }
 th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 th { color: var(--muted); font-weight: 600; }

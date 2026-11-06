@@ -4,7 +4,7 @@ const WIDTH = 1000
 const LEFT = 44
 const LANE_HEIGHT = 34
 const LANE_GAP = 6
-const TOP = 22
+const TOP = 26
 
 interface Props {
   deck: Deck
@@ -29,14 +29,14 @@ export function DeckView({ deck, highlightSlots = [], onSlotClick }: Props) {
   return (
     <svg className="deck" viewBox={`0 0 ${WIDTH} ${height}`} role="img"
       aria-label={`Deck plan: ${deck.placements.length} units loaded`}>
-      <text x={LEFT} y={14}>Stern</text>
-      <text x={WIDTH - 8} y={14} textAnchor="end">Bow</text>
+      <text x={LEFT} y={18}>Stern</text>
+      <text x={WIDTH - 8} y={18} textAnchor="end">Bow</text>
       {lanes.map((lane) => {
         const y = yOf.get(lane.id) as number
         const zoneWidth = (lane.length_m / deck.zones) * scale
         return (
           <g key={lane.id}>
-            <text x={0} y={y + LANE_HEIGHT / 2 + 4}>{lane.id}</text>
+            <text x={0} y={y + LANE_HEIGHT / 2 + 6}>{lane.id}</text>
             <rect className="lane" x={LEFT} y={y} width={lane.length_m * scale} height={LANE_HEIGHT} rx={3} />
             {Array.from({ length: deck.zones - 1 }, (_, i) => (
               <line key={i} className="zone-line" x1={LEFT + (i + 1) * zoneWidth} x2={LEFT + (i + 1) * zoneWidth}

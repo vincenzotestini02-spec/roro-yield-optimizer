@@ -32,7 +32,7 @@ function Waiting({ label, note }: { label: string; note: string }) {
 function AdvisorTable({ game, requests }: { game: SavedGame; requests: Booking[] }) {
   const actions = new Map(game.decisions.map((d) => [d.booking_id, d.action]))
   return (
-    <div className="table-wrap">
+    <div className="table-wrap table-scroll">
       <table>
         <thead>
           <tr><th>#</th><th>Request</th><th>You</th><th>Advisor</th><th>Futures</th><th className="num">Expected gain</th><th>✗</th></tr>

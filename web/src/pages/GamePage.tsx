@@ -79,15 +79,24 @@ export function GamePage() {
     if (!advisorOn || currentId === undefined || gameRef.current.verdicts[currentId] !== undefined) return
     const abort = new AbortController()
     const { seed, decisions } = gameRef.current
+    let openJob: string | null = null
     setVerdictError(null)
     api.startVerdict(seed, decisions)
-      .then(({ job_id }) => pollJob<Verdict>(job_id, () => {}, abort.signal))
+      .then(({ job_id }) => {
+        openJob = job_id
+        return pollJob<Verdict>(job_id, () => {}, abort.signal)
+      })
       .then((result) => {
+        openJob = null
         const now = gameRef.current
         store({ ...now, verdicts: { ...now.verdicts, [currentId]: result } })
       })
       .catch((e) => { if (!abort.signal.aborted) setVerdictError(message(e)) })
-    return () => abort.abort()
+    return () => {
+      abort.abort()
+      // The player moved on: free the queue for the verdicts still to come.
+      if (openJob !== null) void api.cancelJob(openJob).catch(() => {})
+    }
   }, [advisorOn, currentId, verdictTry, store])
 
   function decide(decision: Decision) {

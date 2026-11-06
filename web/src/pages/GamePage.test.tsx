@@ -9,7 +9,7 @@ import { GamePage } from './GamePage'
 
 vi.mock('../api', async (original) => ({
   ...(await original<typeof import('../api')>()),
-  api: { gameState: vi.fn(), startVerdict: vi.fn() },
+  api: { gameState: vi.fn(), startVerdict: vi.fn(), cancelJob: vi.fn() },
   pollJob: vi.fn(),
 }))
 const gameMock = vi.mocked(api.gameState)
@@ -30,6 +30,7 @@ beforeEach(() => {
   localStorage.clear()
   gameMock.mockResolvedValue(gameState())
   vi.mocked(api.startVerdict).mockResolvedValue({ job_id: 'j1' })
+  vi.mocked(api.cancelJob).mockResolvedValue(undefined)
   vi.mocked(pollJob).mockResolvedValue(verdict())
 })
 
@@ -97,6 +98,17 @@ test('a lost verdict job shows a retry button, and the game can continue', async
   await userEvent.click(await screen.findByRole('button', { name: 'Ask the advisor again' }))
   await screen.findByText(/pays off in 15 of 20/)
   expect(screen.getByRole('button', { name: 'Reject' })).toBeEnabled()
+})
+
+test('moving on cancels a verdict still in the queue', async () => {
+  vi.mocked(pollJob).mockImplementation(() => new Promise(() => {}))
+  show()
+  await screen.findByText(/Request 1 of 60/)
+  await userEvent.click(screen.getByRole('button', { name: 'Advisor on' }))
+  await waitFor(() => expect(pollJob).toHaveBeenCalled())
+  gameMock.mockResolvedValue(gameState({ index: 1, current: booking('B002') }))
+  await userEvent.click(screen.getByRole('button', { name: 'Reject' }))
+  await waitFor(() => expect(api.cancelJob).toHaveBeenCalledWith('j1'))
 })
 
 test('a contract floor warning is shown', async () => {
