@@ -54,6 +54,16 @@ test('manual mode waits for a slot click before deciding', async () => {
     [{ booking_id: 'B001', action: 'accept', slot: 'L2-Z0' }]))
 })
 
+test('zone buttons offer a larger target for manual placement', async () => {
+  show()
+  await screen.findByText(/Request 1 of 60/)
+  await userEvent.click(screen.getByRole('button', { name: /I place them/ }))
+  await userEvent.click(screen.getByRole('button', { name: 'Accept' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Zone L2-Z0' }))
+  await waitFor(() => expect(gameMock.mock.lastCall?.[1]).toEqual(
+    [{ booking_id: 'B001', action: 'accept', slot: 'L2-Z0' }]))
+})
+
 test('only feasible slots are clickable in manual mode', async () => {
   show()
   await screen.findByText(/Request 1 of 60/)

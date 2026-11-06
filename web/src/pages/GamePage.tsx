@@ -183,6 +183,14 @@ export function GamePage() {
           <div className="card">
             <DeckView deck={deck} highlightSlots={picking ? state.feasible_slots : []}
               onSlotClick={(slot) => decide({ booking_id: currentId as string, action: 'accept', slot })} />
+            {picking && (
+              <div className="row">
+                {state.feasible_slots.map((slot) => (
+                  <button key={slot} aria-label={`Zone ${slot}`}
+                    onClick={() => decide({ booking_id: currentId as string, action: 'accept', slot })}>{slot}</button>
+                ))}
+              </div>
+            )}
             <p className="small muted">
               Contract metres {contractM.toFixed(0)} / {state.contract_floor_m.toFixed(0)} guaranteed · Your margin so far €{margin.toFixed(0)}
             </p>

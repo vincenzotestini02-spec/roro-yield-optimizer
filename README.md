@@ -17,7 +17,7 @@ The question is which bookings to accept, and where to put them, so the sailing 
 
 ## How to play
 
-1. **① Play.** 60 booking requests arrive one by one for tomorrow's sailing (MV Nordic Bridge, Esbjerg → Immingham, 6 lanes × 120 m, each lane split into 4 zones from stern to bow). Accept or reject each, and choose **"🤖 App places them"** or **"✋ I place them"** (you pick the zone). Switch on **"💡 Advisor"** to see a verdict on every request. The deck drawing and the gauges (lane-metres, deadweight, reefer plugs, contract metres, margin, heel, trim, ballast) update live. Units that do not fit or would break the stability limits are refused, and you are warned when the contract guarantee is at risk.
+1. **① Play.** 60 booking requests arrive one by one for tomorrow's sailing (MV Nordic Bridge, Esbjerg → Immingham, 5 lanes × 120 m, a busy sailing with demand at 130% of the deck, each lane split into 4 zones from stern to bow). Accept or reject each, and choose **"🤖 App places them"** or **"✋ I place them"** (you pick the zone). Switch on **"💡 Advisor"** to see a verdict on every request. The deck drawing and the gauges (lane-metres, deadweight, reefer plugs, contract metres, margin, heel, trim, ballast) update live. Units that do not fit or would break the stability limits are refused, and you are warned when the contract guarantee is at risk.
 2. **② Reveal.** Four contenders side by side: **You**, **First come, first served**, **Smart planner (no foresight)** and **Best possible (perfect foresight)**, with their decks drawn, an advisor table for your decisions, and the few decisions that cost you the most, each with a one-line reason.
 3. **③ Lab.** Change the rules with sliders (number of requests, contract share, spot price level, guaranteed contract metres, lanes, lane length, deadweight, reefer plugs, lashing gap, random seed) and watch the optimizer and FCFS re-plan; the smart planner runs on demand, with a button, because it takes a while. The stability limits (max heel, max trim, ballast tank capacity, ballast cost) are sliders too. Download the loading manifest as CSV.
 
@@ -145,7 +145,7 @@ Each item is added only if it measurably beats the simpler version.
 
 ## Run locally
 
-Requires Python 3.11+.
+Requires Python 3.11+ and Node.js 22+.
 
 ```bash
 git clone https://github.com/vincenzotestini02-spec/roro-yield-optimizer.git
@@ -153,11 +153,15 @@ cd roro-yield-optimizer
 python -m venv .venv
 .venv\Scripts\activate          # Windows  (macOS/Linux: source .venv/bin/activate)
 pip install -r requirements.txt -r requirements-dev.txt
-streamlit run streamlit_app.py
-pytest -q -m "not slow"        # fast test suite
+npm --prefix web ci
+npm --prefix web run build
+uvicorn server.main:app --port 8000   # then open http://localhost:8000
+pytest -q -m "not slow"               # fast engine and API tests
+npm --prefix web test -- --run        # interface tests
+npm --prefix web exec playwright test # browser tests, using installed Chrome
 ```
 
-The engine (`roro_yield/`: models, demand simulator, deck state, stability, FCFS, MILP optimizer, advisor, KPIs, explainer, manifest) is independent of the Streamlit UI (`app/`), so it can be reused behind an API or another interface.
+The engine (`roro_yield/`: models, demand simulator, deck state, stability, FCFS, MILP optimizer, advisor, KPIs, explainer, manifest) is independent of the API (`server/`) and the React interface (`web/`), so it can be reused behind an API or another interface.
 
 ## Synthetic data
 
