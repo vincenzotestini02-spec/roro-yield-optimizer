@@ -4,3 +4,5 @@ numpy>=1.26
 pandas>=2.1
 plotly>=5.22
 highspy>=1.7
+fastapi>=0.115
+uvicorn[standard]>=0.30

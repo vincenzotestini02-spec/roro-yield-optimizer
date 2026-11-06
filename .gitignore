@@ -6,3 +6,6 @@ __pycache__/
 .claude/
 docs/papers/
 *.log
+web/node_modules/
+web/dist/
+graphify-out/
