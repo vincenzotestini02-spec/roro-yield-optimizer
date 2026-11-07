@@ -11,7 +11,10 @@ def test_reveal_returns_you_and_fcfs_at_once(client, finished_game):
     assert r["smart_job"] and len(r["you"]["rejected"]) == 60 and r["you"]["deck"]["placements"] == []
 
 
-def test_best_before_smart_is_finished_is_409(client, finished_game):
+def test_best_before_smart_is_finished_is_409(client, finished_game, monkeypatch):
+    from server import jobs_api
+    monkeypatch.setattr(jobs_api, "key_of", lambda _: ("smart", 3, 20))
+    monkeypatch.setattr("server.jobs.JobRunner.status", lambda self, key: "running")
     r = client.post("/api/reveal/best", json={**finished_game, "smart_job": "deadbeef"})
     assert r.status_code == 409
 
@@ -27,3 +30,8 @@ def test_best_plan_is_at_least_every_other_plan(client, finished_game, wait):
         r["you"]["kpis"]["objective"], r["fcfs"]["kpis"]["objective"],
         smart["result"]["kpis"]["objective"]) - 1e-6
     assert best["costly"]
+
+
+def test_best_with_a_gone_smart_job_is_404(client, finished_game):
+    r = client.post("/api/reveal/best", json={**finished_game, "smart_job": "deadbeef"})
+    assert r.status_code == 404 and "Start it again" in r.json()["detail"]

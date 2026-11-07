@@ -84,6 +84,10 @@ export function GamePage() {
     api.startVerdict(seed, decisions)
       .then(({ job_id }) => {
         openJob = job_id
+        if (abort.signal.aborted) {  // started after the player moved on
+          void api.cancelJob(job_id).catch(() => {})
+          throw new DOMException('Aborted', 'AbortError')
+        }
         return pollJob<Verdict>(job_id, () => {}, abort.signal)
       })
       .then((result) => {
@@ -122,7 +126,10 @@ export function GamePage() {
     return error === null ? <p className="muted">Getting the sailing ready…</p> : (
       <div className="notice stack">
         <p>{error}</p>
-        <div><button onClick={() => void load(gameRef.current)}>Try again</button></div>
+        <div className="row">
+          <button onClick={() => void load(gameRef.current)}>Try again</button>
+          <button onClick={restart}>Start a new sailing</button>
+        </div>
       </div>
     )
   }

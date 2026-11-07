@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import replace
 from functools import lru_cache
 
@@ -85,7 +86,9 @@ def game_state(req: GameRequest) -> dict:
 
 
 def decisions_key(decisions: list[Decision]) -> tuple:
-    return tuple((d.booking_id, d.action, d.slot) for d in decisions)
+    """A short, stable key for a decision list, so job keys stay small in long games."""
+    text = "|".join(f"{d.booking_id},{d.action},{d.slot}" for d in decisions)
+    return (len(decisions), hashlib.sha256(text.encode()).hexdigest()[:16])
 
 
 @router.post("/verdict")

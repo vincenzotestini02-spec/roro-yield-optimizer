@@ -59,3 +59,14 @@ test('the smart plan joins the comparison', async () => {
   await userEvent.click(screen.getByRole('button', { name: /Run the smart planner/ }))
   await screen.findByRole('columnheader', { name: 'Smart planner' })
 })
+
+test('comparing new settings stops the smart run of the old ones', async () => {
+  render(<LabPage />)
+  await screen.findByRole('columnheader', { name: 'Optimizer' })
+  vi.mocked(pollJob).mockImplementationOnce(() => new Promise(() => {}))
+  await userEvent.click(screen.getByRole('button', { name: /Run the smart planner/ }))
+  await screen.findByRole('button', { name: 'Cancel' })
+  vi.mocked(pollJob).mockResolvedValue(plans)
+  await userEvent.click(screen.getByRole('button', { name: 'Compare plans' }))
+  await waitFor(() => expect(api.cancelJob).toHaveBeenCalledWith('s1'))
+})

@@ -50,3 +50,17 @@ def test_failed_job_reports_a_safe_message(client, wait):
         raise ValueError("internal path C:/secret")
     job = wait(client, jobs_api.submit(("test-boom",), boom), timeout=5)
     assert job["status"] == "failed" and "secret" not in job["error"]
+
+
+def test_registry_forgets_jobs_the_runner_dropped(client):
+    jobs_api.submit(("test-gone",), lambda: 1)
+    get_jobs().cancel(("test-gone",))
+    jobs_api.submit(("test-next",), lambda: 2)
+    assert jobs_api.key_of(jobs_api.job_id(("test-gone",))) is None
+
+
+def test_verdict_keys_stay_small_for_long_games():
+    from server.game_api import decisions_key
+    from server.schemas import Decision
+    long = [Decision(booking_id=f"B{i:03d}", action="reject") for i in range(150)]
+    assert len(repr(decisions_key(long))) < 100

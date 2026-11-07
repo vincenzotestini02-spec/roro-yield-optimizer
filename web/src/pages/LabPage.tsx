@@ -76,7 +76,17 @@ export function LabPage() {
   const [error, setError] = useState<string | null>(null)
   const smartRun = useRef<{ id: string; abort: AbortController } | null>(null)
 
+  const stopSmart = useCallback(() => {
+    const run = smartRun.current
+    if (run === null) return
+    smartRun.current = null
+    run.abort.abort()
+    setSmartProgress(null)
+    void api.cancelJob(run.id)?.catch(() => {})
+  }, [])
+
   const compare = useCallback(async (params: LabValues) => {
+    stopSmart()
     setComputing(true)
     setError(null)
     setSmart(null)
@@ -89,7 +99,7 @@ export function LabPage() {
     } finally {
       setComputing(false)
     }
-  }, [])
+  }, [stopSmart])
 
   useEffect(() => {
     api.labDefaults()
@@ -108,18 +118,14 @@ export function LabPage() {
     } catch (e) {
       if (!abort.signal.aborted) setError(message(e))
     } finally {
-      setSmartProgress(null)
-      smartRun.current = null
+      if (smartRun.current?.abort === abort) {
+        setSmartProgress(null)
+        smartRun.current = null
+      }
     }
   }
 
-  function cancelSmart() {
-    const run = smartRun.current
-    if (run === null) return
-    run.abort.abort()
-    setSmartProgress(null)
-    void api.cancelJob(run.id).catch(() => {})
-  }
+  const cancelSmart = stopSmart
 
   async function download() {
     try {

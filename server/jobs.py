@@ -8,6 +8,9 @@ Keys are tuples such as ("smart", seed) or ("verdict", seed, index).
   called with `*args` only.
 - `result(key)` is None while the job is queued or running, unknown, or failed. A failure never
   raises into the UI: it is logged once and kept in `error(key)`.
+The v3 API calls `cancel(key)` for jobs a visitor abandons; `forget`, `forget_except` and
+`paused` are kept from v2 and are not used by the API.
+
 - `forget_except(prefix)` drops every job whose key does not start with `prefix`. The app calls
   `forget_except(("smart", seed))` on a new game: the old seeds' jobs are dropped, and so are all
   verdict jobs (even of the same seed), because a verdict depends on the player's deck and a new

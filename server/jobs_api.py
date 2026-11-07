@@ -26,9 +26,13 @@ def job_id(key: tuple) -> str:
 
 def submit(key: tuple, fn: Callable, *args: Any, output: Callable[[Any], Any] = lambda x: x) -> str:
     """Start `fn` once per key. `output` turns its result into JSON-friendly data."""
-    get_jobs().submit(key, fn, *args)
+    jobs = get_jobs()
+    jobs.submit(key, fn, *args)
     identifier = job_id(key)
     with _lock:
+        for old in [i for i, k in _keys.items() if jobs.status(k) == "unknown"]:  # expired or cancelled
+            del _keys[old]
+            _outputs.pop(old, None)
         _keys[identifier] = key
         _outputs[identifier] = output
     return identifier

@@ -86,6 +86,8 @@ def reveal_best(req: BestRequest) -> dict:
     key = jobs_api.key_of(req.smart_job)
     jobs = get_jobs()
     status = "unknown" if key is None else jobs.status(key)
+    if status == "unknown":
+        raise HTTPException(404, jobs_api.GONE_MESSAGE)
     if status not in ("done", "failed"):  # a failed smart run still leaves a best plan to show
         raise HTTPException(409, "The smart planner has not finished.")
     smart = jobs.result(key) if status == "done" else None

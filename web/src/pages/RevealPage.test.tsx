@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, expect, test, vi } from 'vitest'
 import { api, pollJob } from '../api'
-import { saveGame } from '../storage'
+import { clearGame, saveGame } from '../storage'
 import { booking, gameState, planResult, verdict } from '../test/fixtures'
 import { RevealPage } from './RevealPage'
 
@@ -17,7 +17,7 @@ const show = () => render(<MemoryRouter><RevealPage /></MemoryRouter>)
 
 beforeEach(() => {
   vi.clearAllMocks()
-  localStorage.clear()
+  clearGame()
   saveGame({
     seed: 3,
     decisions: [
@@ -77,7 +77,7 @@ test('costly decisions are listed', async () => {
 })
 
 test('without a finished game the page points back to the game', async () => {
-  localStorage.clear()
+  clearGame()
   show()
   await screen.findByRole('link', { name: /play a sailing/i })
 })

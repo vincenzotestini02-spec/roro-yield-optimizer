@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, expect, test, vi } from 'vitest'
 import { api, ApiError, pollJob } from '../api'
-import { saveGame } from '../storage'
+import { clearGame, saveGame } from '../storage'
 import { booking, gameState, verdict } from '../test/fixtures'
 import { GamePage } from './GamePage'
 
@@ -27,7 +27,7 @@ function show() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  localStorage.clear()
+  clearGame()
   gameMock.mockResolvedValue(gameState())
   vi.mocked(api.startVerdict).mockResolvedValue({ job_id: 'j1' })
   vi.mocked(api.cancelJob).mockResolvedValue(undefined)
@@ -119,6 +119,28 @@ test('moving on cancels a verdict still in the queue', async () => {
   gameMock.mockResolvedValue(gameState({ index: 1, current: booking('B002') }))
   await userEvent.click(screen.getByRole('button', { name: 'Reject' }))
   await waitFor(() => expect(api.cancelJob).toHaveBeenCalledWith('j1'))
+})
+
+test('a verdict that starts after the player moved on is cancelled', async () => {
+  const releases: ((v: { job_id: string }) => void)[] = []
+  vi.mocked(api.startVerdict).mockImplementation(() => new Promise((r) => { releases.push(r) }))
+  show()
+  await screen.findByText(/Request 1 of 60/)
+  await userEvent.click(screen.getByRole('button', { name: 'Advisor on' }))
+  gameMock.mockResolvedValue(gameState({ index: 1, current: booking('B002') }))
+  await userEvent.click(screen.getByRole('button', { name: 'Reject' }))
+  await screen.findByText(/Request 2 of 60/)
+  releases[0]({ job_id: 'late' })  // the verdict for the request already left
+  await waitFor(() => expect(api.cancelJob).toHaveBeenCalledWith('late'))
+})
+
+test('a saved game the server rejects can be replaced by a new sailing', async () => {
+  saveGame({ seed: 77, decisions: [{ booking_id: 'B001', action: 'accept', slot: 'L9-Z0' }], verdicts: {} })
+  gameMock.mockRejectedValueOnce(new ApiError(422, 'L9-Z0 is not a deck zone.'))
+  show()
+  await userEvent.click(await screen.findByRole('button', { name: 'Start a new sailing' }))
+  await screen.findByText(/Request 1 of 60/)
+  expect(gameMock.mock.lastCall?.[1]).toEqual([])
 })
 
 test('a contract floor warning is shown', async () => {
