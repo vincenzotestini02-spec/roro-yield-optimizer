@@ -18,7 +18,7 @@ from roro_yield.deck import DeckState
 from roro_yield.demand import expected_remaining, requests_for_level
 from roro_yield.kpis import evaluate
 from roro_yield.models import Booking, Plan, Scenario, Slot, Vessel
-from roro_yield.planning import OnBoardConflict, plan_accepted
+from roro_yield.planning import OnBoardConflict, place_all, plan_accepted
 from roro_yield.simulator import HANDLING_PER_TONNE, HANDLING_PER_UNIT, REEFER_FEE, ScenarioParams, generate_scenario
 from server import jobs_api
 from server.config import ADVISOR_K, GAME_PARAMS
@@ -29,6 +29,7 @@ from server.serialize import deck_out, kpis_out, parse_slot, verdict_out
 router = APIRouter(prefix="/api/planner")
 
 MAX_BOOKINGS = 500
+STALE_PLAN = "The plan does not match the current vessel settings. Plan again first."
 PLANNER_LOST_SPACE = 0.15
 VESSEL_FIELDS = ("n_lanes", "lane_length_m", "max_dwt_t", "reefer_plugs", "lashing_gap_m", "max_heel_deg",
                  "max_trim_m", "ballast_tank_cap_t", "ballast_cost_per_t", "broken_stowage_pct", "displacement_t",
@@ -112,12 +113,19 @@ def _scenario(state: PlannerState) -> tuple[Vessel, list[Booking]]:
     return vessel_from(state.vessel), [engine_booking(b, i) for i, b in enumerate(state.bookings)]
 
 
-def plan_out(state: PlannerState, vessel: Vessel, bookings: list[Booking], placements: dict[str, Slot],
-             moved: list[str], excluded: list[tuple[str, str]] | None = None) -> dict:
-    by_id = {b.id: b for b in bookings}
+def deck_for(vessel: Vessel, by_id: dict[str, Booking], placements: dict[str, Slot]) -> DeckState:
+    """The deck holding `placements`; 409 if they do not fit this vessel (settings changed since)."""
     deck = DeckState(vessel)
-    for booking_id, slot in placements.items():
-        deck.place(by_id[booking_id], slot)
+    if place_all(deck, [(by_id[k], slot) for k, slot in placements.items()]):
+        raise HTTPException(409, STALE_PLAN)
+    return deck
+
+
+def plan_out(state: PlannerState, vessel: Vessel, bookings: list[Booking], placements: dict[str, Slot],
+             moved: list[str], excluded: list[tuple[str, str]] | None = None,
+             warnings: list[str] | None = None) -> dict:
+    by_id = {b.id: b for b in bookings}
+    deck = deck_for(vessel, by_id, placements)
     if excluded is None:
         missing = sorted((b for b in bookings if b.id not in placements), key=lambda b: (-b.length_m, b.id))
         excluded = [(b.id, deck.why_not(b) or "no zone can take it with the units already planned") for b in missing]
@@ -130,18 +138,28 @@ def plan_out(state: PlannerState, vessel: Vessel, bookings: list[Booking], place
         "deck": deck_out(deck),
         "kpis": kpis_out(evaluate(Scenario(vessel, tuple(bookings), 0.0, 0.0), plan)),
         "revenue_known": all(priced[k] for k in placements),
+        "warnings": warnings or [],
     }
+
+
+def _on_board(state: PlannerState, previous: dict[str, Slot]) -> tuple[frozenset[str], list[str]]:
+    """Units that can be held on board, and a warning for each one marked on board without a zone."""
+    marked = [b.booking_id for b in state.bookings if b.on_board]
+    held = frozenset(k for k in marked if k in previous)
+    warnings = [f"{k} is marked on board but has no zone yet: it was planned like the others. "
+                "Mark it again once its zone is right." for k in marked if k not in previous]
+    return held, warnings
 
 
 def _run_plan(state: PlannerState) -> dict:
     vessel, bookings = _scenario(state)
-    on_board = frozenset(b.booking_id for b in state.bookings if b.on_board)
     previous = _placements(state)
+    on_board, warnings = _on_board(state, previous)
     try:
         result = plan_accepted(vessel, bookings, previous=previous, on_board=on_board)
     except OnBoardConflict as exc:
         raise HTTPException(422, f"{exc.booking_id} is on board, but {exc.reason}.") from None
-    return plan_out(state, vessel, bookings, result.plan.placements, result.moved, result.excluded)
+    return plan_out(state, vessel, bookings, result.plan.placements, result.moved, result.excluded, warnings)
 
 
 def _state_key(state: BaseModel) -> str:
@@ -151,12 +169,12 @@ def _state_key(state: BaseModel) -> str:
 @router.post("/plan")
 def planner_plan(state: PlannerState) -> dict:
     vessel, bookings = _scenario(state)
-    on_board = {b.booking_id for b in state.bookings if b.on_board}
     previous = _placements(state)
+    on_board, _ = _on_board(state, previous)
     # On-board conflicts are cheap to find: answer them now rather than as a failed job.
     try:
         plan_accepted(vessel, [b for b in bookings if b.id in on_board], previous=previous,
-                      on_board=frozenset(on_board), time_limit_s=1)
+                      on_board=on_board, time_limit_s=1)
     except OnBoardConflict as exc:
         raise HTTPException(422, f"{exc.booking_id} is on board, but {exc.reason}.") from None
     return {"job_id": jobs_api.submit(("planner", _state_key(state)), _run_plan, state)}
@@ -176,9 +194,7 @@ def planner_move(req: MoveRequest) -> dict:
     except ValueError:
         raise HTTPException(422, f"{req.slot} is not a deck zone.") from None
     placements = {k: v for k, v in _placements(req).items() if k != req.booking_id}
-    deck = DeckState(vessel)
-    for booking_id, s in placements.items():
-        deck.place(by_id[booking_id], s)
+    deck = deck_for(vessel, by_id, placements)
     unit = by_id[req.booking_id]
     if slot not in deck.remaining_m:
         raise HTTPException(422, f"{req.slot} is not a zone of this vessel.")
@@ -200,9 +216,7 @@ def planner_advise(req: AdviseRequest) -> dict:
     if req.request.booking_id in {b.id for b in bookings}:
         raise HTTPException(422, f"{req.request.booking_id} is already a booking.")
     by_id = {b.id: b for b in bookings}
-    deck = DeckState(vessel)
-    for booking_id, slot in _placements(req).items():
-        deck.place(by_id[booking_id], slot)
+    deck = deck_for(vessel, by_id, _placements(req))
     d = req.demand
     frac = min(max(1 - d.hours_to_departure / (d.window_days * 24), 0.0), 1.0)
     usable = sum(vessel.zone_capacity_m(lane) * 4 for lane in vessel.lanes)

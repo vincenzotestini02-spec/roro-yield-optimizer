@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, expect, test, vi } from 'vitest'
@@ -267,4 +267,43 @@ test('a duplicate booking id is refused with the reason', async () => {
   await fillRequest()
   await userEvent.click(screen.getByRole('button', { name: 'Ask the advisor' }))
   await screen.findByText('B1 is already a booking.')
+})
+
+test('while a plan is computing, moves and downloads wait', async () => {
+  await planned()
+  vi.mocked(pollJob).mockImplementation(() => new Promise(() => {}))
+  await userEvent.click(screen.getByRole('checkbox', { name: 'B1 on board' }))
+  await screen.findByText('Planning…')
+  expect(screen.getByRole('button', { name: 'Select B2' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Download PDF' })).toBeDisabled()
+})
+
+test('dragging the lost space slider sends one plan when it settles', async () => {
+  await planned()
+  const before = vi.mocked(api.plannerPlan).mock.calls.length
+  const slider = screen.getByLabelText(/Lost space/)
+  for (const v of ['0.16', '0.17', '0.18', '0.19', '0.2']) fireEvent.change(slider, { target: { value: v } })
+  await new Promise((r) => setTimeout(r, 900))
+  await waitFor(() => expect(vi.mocked(api.plannerPlan).mock.calls.length).toBe(before + 1))
+  expect(api.plannerPlan).toHaveBeenLastCalledWith(expect.objectContaining({
+    vessel: expect.objectContaining({ broken_stowage_pct: 0.2 }) }))
+})
+
+test('a replan that fails on reload still shows the bookings and a way to start over', async () => {
+  savePlanner({
+    vessel: { preset: 'demo', broken_stowage_pct: 0.15, n_lanes: 5, lane_length_m: 120 },
+    bookings: [booking('B1', { on_board: true })], placements: { B1: 'L1-Z0' },
+    demand: { level: 'normal', contract_share: 0.45, spot_rate_multiplier: 1, window_days: 14, hours_to_departure: 72 }, log: [],
+  })
+  vi.mocked(api.plannerPlan).mockRejectedValue(new ApiError(422, 'B1 is on board, but it no longer fits in zone L1-Z0.'))
+  render(<MemoryRouter><PlannerPage /></MemoryRouter>)
+  await screen.findByText(/no longer fits in zone L1-Z0/)
+  expect(screen.getByRole('checkbox', { name: 'B1 on board' })).toBeChecked()
+  expect(screen.getByRole('button', { name: 'Start over' })).toBeInTheDocument()
+})
+
+test('plan warnings are shown', async () => {
+  vi.mocked(pollJob).mockResolvedValue({ ...planResult(), warnings: ['B1 is marked on board but has no zone yet'] })
+  await planned()
+  await screen.findByText(/marked on board but has no zone yet/)
 })

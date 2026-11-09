@@ -224,6 +224,7 @@ export interface PlannerPlan {
   deck: Deck
   kpis: Kpis
   revenue_known: boolean
+  warnings?: string[]
 }
 
 export interface RowError {

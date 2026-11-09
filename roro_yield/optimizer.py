@@ -199,10 +199,15 @@ def _greedy_on(deck: DeckState, scenario: Scenario) -> Plan:
 
 
 def solve_optimal(scenario: Scenario, time_limit_s: float = 3, candidates: Sequence[Plan] = (),
-                  deck: DeckState | None = None) -> Plan:
-    """Best plan by the common objective. With `deck`, its units are fixed and part of the result."""
+                  deck: DeckState | None = None, keep: dict[str, Slot] | None = None,
+                  keep_bonus: float = 0.0) -> Plan:
+    """Best plan by the common objective. With `deck`, its units are fixed and part of the result.
+
+    With `keep` (deck mode only), each booking placed at its slot in `keep` earns `keep_bonus` in the
+    model, so among equally good plans the one that moves fewest units wins.
+    """
     if deck is not None:
-        return _solve_on_deck(scenario, time_limit_s, candidates, deck)
+        return _solve_on_deck(scenario, time_limit_s, candidates, deck, keep or {}, keep_bonus)
     vessel = scenario.vessel
 
     seeds = [solve_fcfs(scenario), *candidates]
@@ -238,7 +243,8 @@ def solve_optimal(scenario: Scenario, time_limit_s: float = 3, candidates: Seque
     return _sorted_plan(scenario, best.placements)
 
 
-def _solve_on_deck(scenario: Scenario, time_limit_s: float, candidates: Sequence[Plan], deck: DeckState) -> Plan:
+def _solve_on_deck(scenario: Scenario, time_limit_s: float, candidates: Sequence[Plan], deck: DeckState,
+                   keep: dict[str, Slot], keep_bonus: float) -> Plan:
     fixed = dict(deck.placements)
     full = Scenario(scenario.vessel, tuple(b for b, _ in deck.loads.values()) + tuple(scenario.bookings),
                     scenario.contract_commitment_m, scenario.shortfall_penalty_per_m)
@@ -254,6 +260,10 @@ def _solve_on_deck(scenario: Scenario, time_limit_s: float, candidates: Sequence
     model = build_model(scenario.vessel, scenario.bookings, scenario.contract_floor_m,
                         scenario.shortfall_penalty_per_m, deck=deck)
     prob, y = model.prob, model.y
+    stay = [(y[(bid, slot.lane_id, slot.zone)], keep_bonus) for bid, slot in keep.items()
+            if (bid, slot.lane_id, slot.zone) in y]
+    if stay and keep_bonus > 0:
+        prob.setObjective(prob.objective + pulp.LpAffineExpression(stay))
     start = {v.name: 0.0 for v in prob.variables()}
     for bid, slot in incumbent.placements.items():
         name = f"y_{bid}_{slot.lane_id}_{slot.zone}"

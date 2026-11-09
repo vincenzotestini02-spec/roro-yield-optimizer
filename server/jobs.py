@@ -79,8 +79,12 @@ class JobRunner:
 
     def submit(self, key: tuple, fn: Callable, *args: Any) -> None:
         with self._lock:
-            if key in self._jobs:
-                return
+            old = self._jobs.get(key)
+            if old is not None:
+                done = old.future.done() and not old.future.cancelled()
+                if not (done and old.future.exception() is not None):
+                    return
+                del self._jobs[key]  # a failed job can be tried again
             self._expire()
             if sum(not j.future.done() for j in self._jobs.values()) >= self._limit:
                 raise QueueFull(key)

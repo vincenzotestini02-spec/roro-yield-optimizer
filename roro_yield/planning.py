@@ -15,6 +15,9 @@ from .models import Booking, Plan, Scenario, Slot, Vessel
 from .optimizer import solve_optimal
 
 METRE_WEIGHT = 1000.0
+# Staying put is worth less than half a metre of cargo, so the planner never trades loaded
+# metres for fewer moves, but between equally full plans it keeps units where they were.
+KEEP_BONUS = 400.0
 PLANNER_LABEL = "Planner"
 NO_ROOM = "no zone can take it with the units already planned"
 
@@ -35,19 +38,43 @@ class PlanningResult:
     moved: list[str]
 
 
+def place_all(deck: DeckState, items: Sequence[tuple[Booking, Slot]]) -> list[tuple[Booking, Slot, str]]:
+    """Place units at given slots in any order that works; return those that never fit, with reasons.
+
+    `DeckState` checks ballast and deadweight after every unit, while a plan only has to be feasible
+    once complete, so a unit refused early can fit after others are on. Repeat passes until no
+    progress is made.
+    """
+    pending = list(items)
+    while pending:
+        left = []
+        for b, slot in pending:
+            if slot in deck.remaining_m and slot in deck.feasible_slots(b):
+                deck.place(b, slot)
+            else:
+                left.append((b, slot))
+        if len(left) == len(pending):
+            break
+        pending = left
+    failed = []
+    for b, slot in pending:
+        if slot not in deck.remaining_m:
+            failed.append((b, slot, f"its zone {slot} does not exist on this vessel"))
+        else:
+            failed.append((b, slot, deck.why_not(b) or f"it no longer fits in zone {slot}"))
+    return failed
+
+
 def _fixed_deck(vessel: Vessel, by_id: dict[str, Booking], previous: dict[str, Slot],
                 on_board: frozenset[str]) -> DeckState:
     deck = DeckState(vessel)
     for booking_id in sorted(on_board):
-        b = by_id[booking_id]
-        slot = previous.get(booking_id)
-        if slot is None:
-            raise OnBoardConflict(booking_id, "it is marked on board but has no position in the plan")
-        if slot not in deck.remaining_m:
-            raise OnBoardConflict(booking_id, f"its zone {slot} does not exist on this vessel")
-        if slot not in deck.feasible_slots(b):
-            raise OnBoardConflict(booking_id, deck.why_not(b) or f"it no longer fits in zone {slot}")
-        deck.place(b, slot)
+        if booking_id not in previous:
+            raise OnBoardConflict(booking_id, "it has no zone in the plan yet")
+    failed = place_all(deck, [(by_id[k], previous[k]) for k in sorted(on_board)])
+    if failed:
+        b, _, reason = failed[0]
+        raise OnBoardConflict(b.id, reason)
     return deck
 
 
@@ -56,11 +83,8 @@ def _keep_previous(deck: DeckState, others: Sequence[Booking], previous: dict[st
     trial = deck.copy()
     old = [b for b in others if b.id in previous]
     new = [b for b in others if b.id not in previous]
-    for b in old:
-        slot = previous[b.id]
-        if slot not in trial.remaining_m or slot not in trial.feasible_slots(b):
-            return None
-        trial.place(b, slot)
+    if place_all(trial, [(b, previous[b.id]) for b in old]):
+        return None
     for b in new:
         slot = trial.best_slot(b)
         if slot is None:
@@ -84,11 +108,11 @@ def plan_accepted(vessel: Vessel, bookings: Sequence[Booking], previous: dict[st
         scenario = Scenario(vessel, weighted, 0.0, 0.0)
         start = {k: v for k, v in previous.items() if k not in on_board}
         candidates = (Plan("Previous", start, []),) if start else ()
-        placements = solve_optimal(scenario, time_limit_s=time_limit_s, candidates=candidates, deck=deck).placements
+        placements = solve_optimal(scenario, time_limit_s=time_limit_s, candidates=candidates, deck=deck,
+                                   keep=start, keep_bonus=KEEP_BONUS).placements
 
     final = DeckState(vessel)
-    for booking_id, slot in placements.items():
-        final.place(by_id[booking_id], slot)
+    place_all(final, [(by_id[k], slot) for k, slot in placements.items()])
     missing = sorted((b for b in bookings if b.id not in placements), key=lambda b: (-b.length_m, b.id))
     excluded = [(b.id, final.why_not(b) or NO_ROOM) for b in missing]
     moved = [k for k, slot in previous.items() if k in placements and placements[k] != slot]

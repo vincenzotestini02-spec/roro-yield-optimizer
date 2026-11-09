@@ -22,6 +22,8 @@ router = APIRouter(prefix="/api/planner")
 
 MAX_BYTES = 5 * 1024 * 1024
 MAX_ROWS = 500
+MAX_SCAN_ROWS = 5000  # rows read at most, blank ones included
+MAX_COLUMNS = 40
 REQUIRED = ("booking_id", "customer", "unit_type", "length_m", "weight_t", "discharge_port")
 OPTIONAL = ("segment", "is_reefer", "rate_per_m", "reefer_fee", "height_m", "axle_count", "on_board")
 SEVERAL_PORTS = "Several discharge ports arrive in a later version: the plan treats them as one."
@@ -118,7 +120,10 @@ def read_bookings(data: bytes) -> tuple[list[PlannerBooking], list[RowError], li
     except Exception:
         return _file_error("The .xlsx file cannot be read. Save it again from Excel and retry.")
     ws = wb["Bookings"] if "Bookings" in wb.sheetnames else wb.worksheets[0]
-    rows = ws.iter_rows(values_only=True)
+    # The sheet's stated size can be huge for a tiny file; never walk past these bounds.
+    if (ws.max_row or 0) > MAX_SCAN_ROWS or (ws.max_column or 0) > MAX_COLUMNS * 25:
+        return _file_error(f"The sheet is too large: keep it under {MAX_ROWS} bookings and {MAX_COLUMNS} columns.")
+    rows = ws.iter_rows(max_row=MAX_SCAN_ROWS, max_col=MAX_COLUMNS, values_only=True)
     header = next(rows, None)
     if header is None:
         return _file_error("The sheet is empty.")
@@ -205,8 +210,9 @@ def download_template() -> Response:
 
 
 @router.post("/import")
-async def import_bookings(file: UploadFile = File(...)) -> dict:
-    data = await file.read(MAX_BYTES + 1)
+def import_bookings(file: UploadFile = File(...)) -> dict:
+    # A plain def runs in the thread pool, so a slow file never blocks other visitors.
+    data = file.file.read(MAX_BYTES + 1)
     bookings, errors, warnings = read_bookings(data)
     return {
         "bookings": [b.model_dump() for b in bookings],

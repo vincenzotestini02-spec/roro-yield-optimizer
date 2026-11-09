@@ -222,3 +222,20 @@ def test_old_finished_jobs_expire():
     _wait(jobs, ("old",), timeout=3)
     jobs.submit(("new",), lambda: 2)
     assert jobs.status(("old",)) == "unknown"
+
+
+def test_a_failed_job_can_be_submitted_again():
+    jobs = JobRunner()
+    calls = []
+
+    def flaky():
+        calls.append(1)
+        if len(calls) == 1:
+            raise ValueError("first try")
+        return "ok"
+
+    jobs.submit(("x",), flaky)
+    _wait(jobs, ("x",), timeout=3)
+    assert jobs.status(("x",)) == "failed"
+    jobs.submit(("x",), flaky)
+    assert _wait(jobs, ("x",), timeout=3) == "ok"

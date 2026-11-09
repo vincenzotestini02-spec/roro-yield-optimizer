@@ -6,7 +6,7 @@ import { RequestPanel } from '../components/RequestPanel'
 import { StabilityView } from '../components/StabilityView'
 import { downloadBlob } from '../download'
 import { euro } from '../format'
-import { loadPlanner, parseSessionFile, savePlanner } from '../planner'
+import { clearPlanner, loadPlanner, parseSessionFile, savePlanner } from '../planner'
 import type { Demand, LabDefaults, PlannerBookingIn, PlannerPlan, PlannerSession, PlannerVerdict, PlannerVessel, RowError } from '../types'
 
 const DEFAULT_DEMAND: Demand = { level: 'normal', contract_share: 0.45, spot_rate_multiplier: 1, window_days: 14, hours_to_departure: 72 }
@@ -48,6 +48,8 @@ export function PlannerPage() {
   const [verdict, setVerdict] = useState<PlannerVerdict | null>(null)
   const [asking, setAsking] = useState(false)
   const latest = useRef(0)
+  const runningJob = useRef<string | null>(null)
+  const lostSpaceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const store = useCallback((next: PlannerSession) => {
     setSession(next)
@@ -58,10 +60,13 @@ export function PlannerPage() {
     store(next)
     if (next.bookings.length === 0) { setPlan(null); return }
     const request = ++latest.current  // only the newest plan may change the page
+    if (runningJob.current !== null) void api.cancelJob?.(runningJob.current)?.catch(() => {})
+    runningJob.current = null
     setBusy(true)
     setError(null)
     try {
       const { job_id } = await api.plannerPlan(stateOf(next))
+      if (request === latest.current) runningJob.current = job_id
       const result = await pollJob<PlannerPlan>(job_id, () => {})
       if (request !== latest.current) return
       setPlan(result)
@@ -105,7 +110,21 @@ export function PlannerPage() {
 
   function changeLostSpace(value: number) {
     if (session === null) return
-    void replan({ ...session, vessel: { ...session.vessel, broken_stowage_pct: value } })
+    // Show the value at once, but plan only once the slider has settled.
+    const next = { ...session, vessel: { ...session.vessel, broken_stowage_pct: value } }
+    store(next)
+    if (lostSpaceTimer.current !== null) clearTimeout(lostSpaceTimer.current)
+    lostSpaceTimer.current = setTimeout(() => void replan(next), 600)
+  }
+
+  function startOver() {
+    if (defaults === null) return
+    clearPlanner()
+    latest.current += 1
+    setPlan(null)
+    setError(null)
+    setBusy(false)
+    store(emptySession(vesselFor(defaults, 'demo', PLANNER_LOST_SPACE)))
   }
 
   function changeDemand(demand: Demand) {
@@ -144,7 +163,8 @@ export function PlannerPage() {
   }
 
   async function moveTo(slot: string) {
-    if (session === null || selected === null) return
+    if (session === null || selected === null || busy) return
+    latest.current += 1  // a plan still on its way must not undo this move
     setError(null)
     try {
       const result = await api.plannerMove(stateOf(session), selected, slot)
@@ -181,6 +201,7 @@ export function PlannerPage() {
     await replan(parsed)
   }
 
+  const shownPlacements = plan?.placements ?? session?.placements ?? {}
   const byId = new Map((session?.bookings ?? []).map((b): [string, PlannerBookingIn] => [b.booking_id, b]))
 
   return (
@@ -192,6 +213,7 @@ export function PlannerPage() {
       </div>
       {loaded.damaged && <p className="notice">Your saved planner session could not be read and was cleared.</p>}
       {error && <p className="notice">{error}</p>}
+      {plan?.warnings?.map((w) => <p key={w} className="notice small">{w}</p>)}
       <div className="grid-2">
         <section className="card" aria-label="Planner settings">
           {defaults && session && (
@@ -218,6 +240,7 @@ export function PlannerPage() {
           {warnings.map((w) => <p key={w} className="notice small">{w}</p>)}
           <div className="row">
             <button disabled={session === null || session.bookings.length === 0} onClick={saveSession}>Save session (.json)</button>
+            <button disabled={session === null || session.bookings.length === 0} onClick={startOver}>Start over</button>
           </div>
           <label className="field">
             <span>Open a saved session</span>
@@ -261,32 +284,8 @@ export function PlannerPage() {
                 )}
                 <StabilityView deck={plan.deck} />
                 <div className="row">
-                  <button onClick={() => void download('pdf')}>Download PDF</button>
-                  <button onClick={() => void download('csv')}>Download CSV</button>
-                </div>
-              </section>
-              <section className="card">
-                <h2>Bookings</h2>
-                <div className="table-wrap table-scroll">
-                  <table>
-                    <thead><tr><th>Booking</th><th>Customer</th><th>Unit</th><th className="num">Length</th><th>Zone</th><th>On board</th><th>Move</th></tr></thead>
-                    <tbody>
-                      {(session?.bookings ?? []).map((b) => {
-                        const zone = plan.placements[b.booking_id]
-                        return (
-                          <tr key={b.booking_id}>
-                            <td>{b.booking_id}</td><td>{b.customer}</td><td>{b.unit_type}</td>
-                            <td className="num">{b.length_m}</td><td>{zone ?? 'excluded'}</td>
-                            <td><input type="checkbox" aria-label={`${b.booking_id} on board`} checked={b.on_board}
-                              disabled={zone === undefined && !b.on_board} onChange={() => toggleOnBoard(b.booking_id)} /></td>
-                            <td>{zone !== undefined && !b.on_board && (
-                              <button aria-label={`Select ${b.booking_id}`} onClick={() => setSelected(b.booking_id)}>Move</button>
-                            )}</td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
+                  <button disabled={busy} onClick={() => void download('pdf')}>Download PDF</button>
+                  <button disabled={busy} onClick={() => void download('csv')}>Download CSV</button>
                 </div>
               </section>
               {session && (
@@ -312,6 +311,32 @@ export function PlannerPage() {
                 </section>
               )}
             </>
+          )}
+          {session && session.bookings.length > 0 && (
+            <section className="card">
+              <h2>Bookings</h2>
+              <div className="table-wrap table-scroll">
+                <table>
+                  <thead><tr><th>Booking</th><th>Customer</th><th>Unit</th><th className="num">Length</th><th>Zone</th><th>On board</th><th>Move</th></tr></thead>
+                  <tbody>
+                    {(session?.bookings ?? []).map((b) => {
+                      const zone = shownPlacements[b.booking_id]
+                      return (
+                        <tr key={b.booking_id}>
+                          <td>{b.booking_id}</td><td>{b.customer}</td><td>{b.unit_type}</td>
+                          <td className="num">{b.length_m}</td><td>{zone ?? 'excluded'}</td>
+                          <td><input type="checkbox" aria-label={`${b.booking_id} on board`} checked={b.on_board}
+                            disabled={busy || (zone === undefined && !b.on_board)} onChange={() => toggleOnBoard(b.booking_id)} /></td>
+                          <td>{zone !== undefined && !b.on_board && (
+                            <button aria-label={`Select ${b.booking_id}`} disabled={busy} onClick={() => setSelected(b.booking_id)}>Move</button>
+                          )}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           )}
         </div>
       </div>

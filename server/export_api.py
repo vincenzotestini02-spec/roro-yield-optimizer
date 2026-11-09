@@ -71,9 +71,10 @@ def resolve_game_plan(seed: int, decisions: list[Decision], plan_key: str) -> tu
 
 
 def resolve_planner_plan(state: PlannerState) -> tuple[Scenario, Plan, list[str]]:
-    from server.planner_api import _placements, _scenario
+    from server.planner_api import _placements, _scenario, deck_for
     vessel, bookings = _scenario(state)
     placements = _placements(state)
+    deck_for(vessel, {b.id: b for b in bookings}, placements)  # 409 if the plan is from other settings
     plan = Plan("Planner", placements, [b.id for b in bookings if b.id not in placements])
     assumptions = [f"Planner plan, {len(placements)} of {len(bookings)} accepted bookings loaded.",
                    f"Lost space (broken stowage): {state.vessel.broken_stowage_pct:.0%}."]
