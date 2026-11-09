@@ -3,9 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, expect, test, vi } from 'vitest'
 import App from '../App'
-import { api, pollJob } from '../api'
+import { api, ApiError, pollJob } from '../api'
 import { clearPlanner, savePlanner } from '../planner'
-import { deck, kpis } from '../test/fixtures'
+import { booking as bookingOut, deck, kpis } from '../test/fixtures'
 import type { PlannerBookingIn, PlannerPlan } from '../types'
 import { PlannerPage } from './PlannerPage'
 
@@ -119,4 +119,79 @@ test('a saved session comes back after a reload', async () => {
   })
   render(<MemoryRouter><PlannerPage /></MemoryRouter>)
   await waitFor(() => expect(api.plannerPlan).toHaveBeenCalledWith(expect.objectContaining({ placements: { B1: 'L1-Z0' } })))
+})
+
+async function planned() {
+  render(<MemoryRouter><PlannerPage /></MemoryRouter>)
+  await userEvent.upload(await screen.findByLabelText(/Upload bookings/), file())
+  await screen.findByRole('img', { name: /Deck plan/ })
+}
+
+test('on board is kept in the session and sent with the next plan', async () => {
+  await planned()
+  await userEvent.click(screen.getByRole('checkbox', { name: 'B1 on board' }))
+  await waitFor(() => expect(api.plannerPlan).toHaveBeenLastCalledWith(expect.objectContaining({
+    bookings: [booking('B1', { on_board: true }), booking('B2')],
+  })))
+})
+
+test('moving a unit to a free zone updates the plan', async () => {
+  vi.mocked(api.plannerMove).mockResolvedValue(planResult({ placements: { B1: 'L2-Z1', B2: 'L2-Z0' }, moved: ['B1'] }))
+  vi.mocked(pollJob).mockResolvedValue(planResult({
+    deck: deck({ placements: [{ booking_id: 'B1', slot: 'L1-Z0', booking: { ...bookingOut('B1') } }] }),
+  }))
+  await planned()
+  await userEvent.click(screen.getByRole('button', { name: 'Select B1' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Zone L2-Z1' }))
+  await waitFor(() => expect(api.plannerMove).toHaveBeenCalledWith(expect.anything(), 'B1', 'L2-Z1'))
+  await screen.findByText(/Moved: B1/)
+})
+
+test('a refused move shows the reason', async () => {
+  vi.mocked(api.plannerMove).mockRejectedValue(new ApiError(422, 'no lane has enough space left'))
+  vi.mocked(pollJob).mockResolvedValue(planResult({
+    deck: deck({ placements: [{ booking_id: 'B1', slot: 'L1-Z0', booking: { ...bookingOut('B1') } }] }),
+  }))
+  await planned()
+  await userEvent.click(screen.getByRole('button', { name: 'Select B1' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Zone L2-Z1' }))
+  await screen.findByText(/no lane has enough space left/)
+})
+
+test('units on board cannot be selected for a move', async () => {
+  vi.mocked(api.importBookings).mockResolvedValue({ bookings: [booking('B1', { on_board: true })], errors: [], warnings: [] })
+  vi.mocked(pollJob).mockResolvedValue(planResult({
+    placements: { B1: 'L1-Z0' },
+    deck: deck({ placements: [{ booking_id: 'B1', slot: 'L1-Z0', booking: { ...bookingOut('B1') } }] }),
+  }))
+  await planned()
+  expect(screen.queryByRole('button', { name: 'Select B1' })).toBeNull()
+})
+
+test('PDF and CSV export the planner plan', async () => {
+  vi.mocked(api.exportPlan).mockResolvedValue(new Blob(['x']))
+  await planned()
+  await userEvent.click(screen.getByRole('button', { name: 'Download PDF' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Download CSV' }))
+  expect(api.exportPlan).toHaveBeenCalledWith(expect.objectContaining({ source: 'planner', plan_key: 'planner' }), 'pdf')
+  expect(api.exportPlan).toHaveBeenCalledWith(expect.objectContaining({ source: 'planner', plan_key: 'planner' }), 'csv')
+})
+
+test('a saved session file opens again', async () => {
+  await planned()
+  const session = {
+    vessel: { preset: 'demo', broken_stowage_pct: 0.15, n_lanes: 5, lane_length_m: 120 }, bookings: [booking('B9')],
+    placements: {}, demand: { level: 'normal', contract_share: 0.45, spot_rate_multiplier: 1, window_days: 14, hours_to_departure: 72 },
+    log: [],
+  }
+  const picked = new File([JSON.stringify(session)], 'session.json', { type: 'application/json' })
+  await userEvent.upload(screen.getByLabelText('Open session'), picked)
+  await waitFor(() => expect(api.plannerPlan).toHaveBeenLastCalledWith(expect.objectContaining({ bookings: [booking('B9')] })))
+})
+
+test('a wrong session file is refused with a message', async () => {
+  await planned()
+  const picked = new File(['{"hello": 1}'], 'session.json', { type: 'application/json' })
+  await userEvent.upload(screen.getByLabelText('Open session'), picked)
+  await screen.findByText(/not a planner session/)
 })

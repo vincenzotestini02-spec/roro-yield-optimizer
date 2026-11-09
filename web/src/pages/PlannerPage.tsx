@@ -3,8 +3,9 @@ import { api, ApiError, pollJob } from '../api'
 import type { PlannerStateBody } from '../api'
 import { DeckView } from '../components/DeckView'
 import { StabilityView } from '../components/StabilityView'
+import { downloadBlob } from '../download'
 import { euro } from '../format'
-import { loadPlanner, savePlanner } from '../planner'
+import { loadPlanner, parseSessionFile, savePlanner } from '../planner'
 import type { Demand, LabDefaults, PlannerBookingIn, PlannerPlan, PlannerSession, PlannerVessel, RowError } from '../types'
 
 const DEFAULT_DEMAND: Demand = { level: 'normal', contract_share: 0.45, spot_rate_multiplier: 1, window_days: 14, hours_to_departure: 72 }
@@ -41,6 +42,8 @@ export function PlannerPage() {
   const [warnings, setWarnings] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [selected, setSelected] = useState<string | null>(null)
+  const [moved, setMoved] = useState<string[]>([])
   const latest = useRef(0)
 
   const store = useCallback((next: PlannerSession) => {
@@ -59,6 +62,7 @@ export function PlannerPage() {
       const result = await pollJob<PlannerPlan>(job_id, () => {})
       if (request !== latest.current) return
       setPlan(result)
+      setMoved(result.moved)
       store({ ...next, placements: result.placements })
     } catch (e) {
       if (request === latest.current) setError(message(e))
@@ -101,6 +105,50 @@ export function PlannerPage() {
     void replan({ ...session, vessel: { ...session.vessel, broken_stowage_pct: value } })
   }
 
+  function toggleOnBoard(id: string) {
+    if (session === null) return
+    const bookings = session.bookings.map((b) => (b.booking_id === id ? { ...b, on_board: !b.on_board } : b))
+    void replan({ ...session, bookings })
+  }
+
+  async function moveTo(slot: string) {
+    if (session === null || selected === null) return
+    setError(null)
+    try {
+      const result = await api.plannerMove(stateOf(session), selected, slot)
+      setPlan(result)
+      setMoved(result.moved)
+      store({ ...session, placements: result.placements })
+      setSelected(null)
+    } catch (e) {
+      setError(message(e))
+    }
+  }
+
+  async function download(format: 'pdf' | 'csv') {
+    if (session === null) return
+    try {
+      const blob = await api.exportPlan({ source: 'planner', plan_key: 'planner', state: stateOf(session) }, format)
+      downloadBlob(blob, `roro-planner.${format}`)
+    } catch (e) {
+      setError(message(e))
+    }
+  }
+
+  function saveSession() {
+    if (session === null) return
+    downloadBlob(new Blob([JSON.stringify(session, null, 2)], { type: 'application/json' }), 'roro-planner-session.json')
+  }
+
+  async function openSession(file: File | undefined) {
+    if (file === undefined) return
+    const parsed = parseSessionFile(await file.text())
+    if (parsed === null) { setError('This file is not a planner session saved by this app.'); return }
+    setRowErrors([])
+    setWarnings([])
+    await replan(parsed)
+  }
+
   const byId = new Map((session?.bookings ?? []).map((b): [string, PlannerBookingIn] => [b.booking_id, b]))
 
   return (
@@ -136,6 +184,13 @@ export function PlannerPage() {
             <input type="file" accept=".xlsx" aria-label="Upload bookings" onChange={(e) => void upload(e.target.files?.[0])} />
           </label>
           {warnings.map((w) => <p key={w} className="notice small">{w}</p>)}
+          <div className="row">
+            <button disabled={session === null || session.bookings.length === 0} onClick={saveSession}>Save session (.json)</button>
+          </div>
+          <label className="field">
+            <span>Open a saved session</span>
+            <input type="file" accept=".json,application/json" aria-label="Open session" onChange={(e) => void openSession(e.target.files?.[0])} />
+          </label>
         </section>
         <div className="stack">
           {rowErrors.length > 0 && (
@@ -160,7 +215,47 @@ export function PlannerPage() {
               </div>
               <section className="card">
                 <DeckView deck={plan.deck} />
+                {moved.length > 0 && <p className="notice small">Moved: {moved.join(', ')}</p>}
+                {selected && (
+                  <div className="stack">
+                    <p className="small">Move {selected} to:</p>
+                    <div className="row">
+                      {plan.deck.lanes.flatMap((lane) => Array.from({ length: plan.deck.zones }, (_, z) => `${lane.id}-Z${z}`)).map((slot) => (
+                        <button key={slot} aria-label={`Zone ${slot}`} onClick={() => void moveTo(slot)}>{slot}</button>
+                      ))}
+                      <button onClick={() => setSelected(null)}>Cancel</button>
+                    </div>
+                  </div>
+                )}
                 <StabilityView deck={plan.deck} />
+                <div className="row">
+                  <button onClick={() => void download('pdf')}>Download PDF</button>
+                  <button onClick={() => void download('csv')}>Download CSV</button>
+                </div>
+              </section>
+              <section className="card">
+                <h2>Bookings</h2>
+                <div className="table-wrap table-scroll">
+                  <table>
+                    <thead><tr><th>Booking</th><th>Customer</th><th>Unit</th><th className="num">Length</th><th>Zone</th><th>On board</th><th>Move</th></tr></thead>
+                    <tbody>
+                      {(session?.bookings ?? []).map((b) => {
+                        const zone = plan.placements[b.booking_id]
+                        return (
+                          <tr key={b.booking_id}>
+                            <td>{b.booking_id}</td><td>{b.customer}</td><td>{b.unit_type}</td>
+                            <td className="num">{b.length_m}</td><td>{zone ?? 'excluded'}</td>
+                            <td><input type="checkbox" aria-label={`${b.booking_id} on board`} checked={b.on_board}
+                              disabled={zone === undefined && !b.on_board} onChange={() => toggleOnBoard(b.booking_id)} /></td>
+                            <td>{zone !== undefined && !b.on_board && (
+                              <button aria-label={`Select ${b.booking_id}`} onClick={() => setSelected(b.booking_id)}>Move</button>
+                            )}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </section>
               {plan.excluded.length > 0 && (
                 <section className="card">
