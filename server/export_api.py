@@ -16,6 +16,7 @@ from server.config import ADVISOR_K
 from server.exports import plan_pdf
 from server.game_api import decisions_key, replay
 from server.lab_api import LabParams, resolve_lab_plan
+from server.planner_api import PlannerState
 from server.runtime import get_jobs
 from server.schemas import MAX_DECISIONS, Decision
 
@@ -27,16 +28,19 @@ GAME_PLANS = {"you", "fcfs", "smart", "best"}
 
 
 class ExportRequest(BaseModel):
-    source: Literal["lab", "game"]
+    source: Literal["lab", "game", "planner"]
     params: LabParams | None = None
+    state: PlannerState | None = None
     seed: int | None = Field(default=None, ge=1, le=10_000)
     decisions: list[Decision] = Field(default_factory=list, max_length=MAX_DECISIONS)
-    plan_key: Literal["fcfs", "optimal", "smart", "you", "best"]
+    plan_key: Literal["fcfs", "optimal", "smart", "you", "best", "planner"]
 
     @model_validator(mode="after")
     def check_combination(self) -> "ExportRequest":
         if self.source == "lab" and (self.params is None or self.plan_key not in LAB_PLANS):
             raise ValueError("A Lab export needs the Lab settings and one of: fcfs, optimal, smart.")
+        if self.source == "planner" and (self.state is None or self.plan_key != "planner"):
+            raise ValueError("A planner export needs the planner state and plan_key planner.")
         if self.source == "game" and (self.seed is None or self.plan_key not in GAME_PLANS):
             raise ValueError("A game export needs the seed and one of: you, fcfs, smart, best.")
         return self
@@ -66,7 +70,21 @@ def resolve_game_plan(seed: int, decisions: list[Decision], plan_key: str) -> tu
     return scenario, solve_optimal(scenario, candidates=(you,) + (() if smart is None else (smart,)))
 
 
+def resolve_planner_plan(state: PlannerState) -> tuple[Scenario, Plan, list[str]]:
+    from server.planner_api import _placements, _scenario
+    vessel, bookings = _scenario(state)
+    placements = _placements(state)
+    plan = Plan("Planner", placements, [b.id for b in bookings if b.id not in placements])
+    assumptions = [f"Planner plan, {len(placements)} of {len(bookings)} accepted bookings loaded.",
+                   f"Lost space (broken stowage): {state.vessel.broken_stowage_pct:.0%}."]
+    if plan.rejected:
+        assumptions.append(f"{len(plan.rejected)} accepted bookings are not on the deck and need a decision.")
+    return Scenario(vessel, tuple(bookings), 0.0, 0.0), plan, assumptions
+
+
 def _resolve(req: ExportRequest) -> tuple[Scenario, Plan, list[str]]:
+    if req.source == "planner":
+        return resolve_planner_plan(req.state)
     if req.source == "lab":
         params = ScenarioParams(**req.params.model_dump())
         found = resolve_lab_plan(params, req.plan_key, rebuild=True)
