@@ -3,6 +3,7 @@ import { api, ApiError, pollJob } from '../api'
 import { DeckView } from '../components/DeckView'
 import { JobProgress } from '../components/JobProgress'
 import { downloadBlob } from '../download'
+import { copyText, decodeLab, encodeLab, hashCode } from '../share'
 import { euro, pctAgainst } from '../format'
 import type { LabDefaults, LabPlans, LabSmart, LabValues, PlanResult } from '../types'
 
@@ -81,6 +82,13 @@ export function LabPage() {
   const [error, setError] = useState<string | null>(null)
   const [preset, setPreset] = useState('demo')
   const [confirmSlow, setConfirmSlow] = useState(false)
+  const [linkError, setLinkError] = useState<string | null>(null)
+  const [copied, setCopied] = useState<string | null>(null)
+
+  async function share() {
+    const url = `${window.location.origin}/lab#p=${encodeLab(ranValues)}`
+    setCopied((await copyText(url)) ? 'Link copied.' : url)
+  }
   const smartRun = useRef<{ id: string; abort: AbortController } | null>(null)
 
   const stopSmart = useCallback(() => {
@@ -110,7 +118,15 @@ export function LabPage() {
 
   useEffect(() => {
     api.labDefaults()
-      .then((d) => { setDefaults(d); setValues(d.values); return compare(d.values) })
+      .then((d) => {
+        setDefaults(d)
+        const code = hashCode(window.location.hash, 'p')
+        const shared = code === null ? null : decodeLab(code, d.limits)
+        if (code !== null && shared === null) setLinkError('This link is damaged or incomplete. Showing the default settings.')
+        const start = { ...d.values, ...(shared ?? {}) }
+        setValues(start)
+        return compare(start)
+      })
       .catch((e) => setError(message(e)))
   }, [compare])
 
@@ -202,6 +218,7 @@ export function LabPage() {
           <p className="small muted">Other hull constants are fixed. The end-tank arm follows the lane length.</p>
         </section>
         <div className="stack">
+          {linkError && <p className="notice">{linkError}</p>}
           {error && <p className="notice">{error}</p>}
           {computing && <p className="muted">Optimising…</p>}
           {plans && best && (
@@ -237,7 +254,9 @@ export function LabPage() {
               <div className="row">
                 <button onClick={() => void download('pdf')}>Download PDF</button>
                 <button onClick={() => void download('csv')}>Download CSV</button>
+                <button onClick={() => void share()}>Copy share link</button>
               </div>
+              {copied && <p className="small muted" style={{ wordBreak: 'break-all' }}>{copied}</p>}
             </>
           )}
         </div>

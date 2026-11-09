@@ -1,19 +1,22 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, expect, test, vi } from 'vitest'
 import { api, pollJob } from '../api'
-import { clearGame, saveGame } from '../storage'
+import { clearGame, loadGame, saveGame } from '../storage'
+import { encodeGame } from '../share'
 import { booking, gameState, planResult, verdict } from '../test/fixtures'
 import { RevealPage } from './RevealPage'
 
+vi.mock('../download', () => ({ downloadBlob: vi.fn() }))
+
 vi.mock('../api', async (original) => ({
   ...(await original<typeof import('../api')>()),
-  api: { gameState: vi.fn(), reveal: vi.fn(), bestPlan: vi.fn() },
+  api: { gameState: vi.fn(), reveal: vi.fn(), bestPlan: vi.fn(), exportPlan: vi.fn() },
   pollJob: vi.fn(),
 }))
 
 const pollMock = vi.mocked(pollJob)
-const show = () => render(<MemoryRouter><RevealPage /></MemoryRouter>)
+const show = (path = '/reveal') => render(<MemoryRouter initialEntries={[path]}><RevealPage /></MemoryRouter>)
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -80,4 +83,39 @@ test('without a finished game the page points back to the game', async () => {
   clearGame()
   show()
   await screen.findByRole('link', { name: /play a sailing/i })
+})
+
+test('a shared link shows the shared result and keeps the viewer game', async () => {
+  pollMock.mockImplementation(() => new Promise(() => {}))
+  saveGame({ seed: 77, decisions: [], verdicts: {} })
+  const code = encodeGame({ seed: 3, decisions: [{ booking_id: 'B1', action: 'reject', slot: null }] })
+  show(`/reveal#g=${code}`)
+  await screen.findByText(/Shared result/)
+  expect(vi.mocked(api.reveal)).toHaveBeenCalledWith(3, [{ booking_id: 'B1', action: 'reject', slot: null }])
+  expect(loadGame()?.seed).toBe(77)
+})
+
+test('a damaged link shows a message and a way back to the game', async () => {
+  show('/reveal#g=@@broken')
+  await screen.findByText(/This link is damaged or incomplete/)
+  expect(screen.getByRole('link', { name: /play a sailing/i })).toBeInTheDocument()
+})
+
+test('copy share link puts a #g= url on the clipboard', async () => {
+  pollMock.mockImplementation(() => new Promise(() => {}))
+  const writeText = vi.fn().mockResolvedValue(undefined)
+  Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+  show()
+  await screen.findByText('€1,000')
+  screen.getByRole('button', { name: 'Copy share link' }).click()
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/reveal#g=')))
+})
+
+test('export buttons download the plan on screen', async () => {
+  pollMock.mockImplementation(() => new Promise(() => {}))
+  vi.mocked(api.exportPlan).mockResolvedValue(new Blob(['x']))
+  show()
+  await screen.findByText('€1,000')
+  screen.getByRole('button', { name: 'Download PDF' }).click()
+  await waitFor(() => expect(api.exportPlan).toHaveBeenCalledWith(expect.objectContaining({ source: 'game', plan_key: 'fcfs', seed: 3 }), 'pdf'))
 })

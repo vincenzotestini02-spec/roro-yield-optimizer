@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { api, ApiError, pollJob } from '../api'
 import { DeckView } from '../components/DeckView'
 import { JobProgress } from '../components/JobProgress'
 import { StabilityView } from '../components/StabilityView'
 import { euro, pctAgainst } from '../format'
+import { downloadBlob } from '../download'
+import { copyText, decodeGame, encodeGame, hashCode } from '../share'
 import { clearGame, loadGame } from '../storage'
-import type { BestResult, Booking, PlanResult, RevealResult, SavedGame } from '../types'
+import type { BestResult, Booking, ExportBody, PlanResult, RevealResult, SavedGame } from '../types'
 
 function PlanCard({ plan, fcfs }: { plan: PlanResult; fcfs: PlanResult }) {
   const k = plan.kpis
@@ -63,7 +65,14 @@ function AdvisorTable({ game, requests }: { game: SavedGame; requests: Booking[]
 
 export function RevealPage() {
   const navigate = useNavigate()
-  const [game] = useState<SavedGame | null>(() => loadGame())
+  const location = useLocation()
+  const sharedCode = hashCode(location.hash, 'g')
+  const [game] = useState<SavedGame | null>(() => {
+    if (sharedCode === null) return loadGame()
+    const shared = decodeGame(sharedCode)
+    return shared === null ? null : { ...shared, verdicts: {} }
+  })
+  const [copied, setCopied] = useState<string | null>(null)
   const [ready, setReady] = useState(game !== null)
   const [requests, setRequests] = useState<Booking[]>([])
   const [reveal, setReveal] = useState<RevealResult | null>(null)
@@ -101,16 +110,42 @@ export function RevealPage() {
     return () => abort.abort()
   }, [game, attempt])
 
+  if (sharedCode !== null && game === null) {
+    return <p className="notice">This link is damaged or incomplete. <Link to="/">Play a sailing</Link></p>
+  }
   if (game === null || !ready) {
     return <p>Nothing to reveal yet. <Link to="/">Play a sailing</Link></p>
   }
 
-  const plans = reveal === null ? [] : [reveal.fcfs, reveal.you, ...(smart ? [smart] : []), ...(best ? [best.plan] : [])]
-  const plan = plans[Math.min(shown, plans.length - 1)]
+  const entries: [PlanResult, ExportBody['plan_key']][] = reveal === null ? [] : [
+    [reveal.fcfs, 'fcfs'], [reveal.you, 'you'],
+    ...(smart ? [[smart, 'smart'] as [PlanResult, ExportBody['plan_key']]] : []),
+    ...(best ? [[best.plan, 'best'] as [PlanResult, ExportBody['plan_key']]] : []),
+  ]
+  const plans = entries.map(([p]) => p)
+  const index = Math.min(shown, plans.length - 1)
+  const plan = plans[index]
+  const planKey = entries[index]?.[1]
+
+  async function share() {
+    const url = `${window.location.origin}/reveal#g=${encodeGame({ seed: game!.seed, decisions: game!.decisions })}`
+    setCopied((await copyText(url)) ? 'Link copied.' : url)
+  }
+
+  async function download(format: 'pdf' | 'csv') {
+    if (planKey === undefined) return
+    try {
+      const body: ExportBody = { source: 'game', seed: game!.seed, decisions: game!.decisions, plan_key: planKey }
+      downloadBlob(await api.exportPlan(body, format), `roro-plan-${planKey}.${format}`)
+    } catch (e) {
+      setError(e instanceof ApiError ? e.detail : 'The download failed.')
+    }
+  }
 
   return (
     <>
       <div className="stack">
+        {sharedCode !== null && <p className="notice">Shared result. Your own game, if any, is unchanged.</p>}
         <h1>The ship has sailed. How did you do?</h1>
         <p className="muted">Score = margin − contract-shortfall penalty − ballast cost. Same rules and same requests for all four.</p>
       </div>
@@ -139,6 +174,10 @@ export function RevealPage() {
           </div>
           <DeckView deck={plan.deck} />
           <StabilityView deck={plan.deck} />
+          <div className="row">
+            <button disabled={planKey === undefined} onClick={() => void download('pdf')}>Download PDF</button>
+            <button disabled={planKey === undefined} onClick={() => void download('csv')}>Download CSV</button>
+          </div>
         </section>
       )}
       <section className="card">
@@ -155,9 +194,13 @@ export function RevealPage() {
         </section>
       )}
       <div className="row">
-        <button onClick={() => { clearGame(); navigate('/') }}>Play another sailing</button>
+        {sharedCode === null
+          ? <button onClick={() => { clearGame(); navigate('/') }}>Play another sailing</button>
+          : <button onClick={() => navigate('/')}>Play your own sailing</button>}
+        <button onClick={() => void share()}>Copy share link</button>
         <button className="primary" onClick={() => navigate('/lab')}>Open the Lab</button>
       </div>
+      {copied && <p className="small muted" style={{ wordBreak: 'break-all' }}>{copied}</p>}
     </>
   )
 }

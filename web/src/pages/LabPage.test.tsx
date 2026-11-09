@@ -128,3 +128,18 @@ test('a 409 on export shows the reason', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Download PDF' }))
   await screen.findByText(/not ready yet/)
 })
+
+test('the lab applies values from #p= and compares', async () => {
+  window.location.hash = '#p=' + btoa(JSON.stringify({ n_lanes: 3, nonsense: 9 })).replace(/=+$/, '')
+  render(<LabPage />)
+  await waitFor(() => expect(api.labPlans).toHaveBeenCalledWith(expect.objectContaining({ n_lanes: 3 })))
+  window.location.hash = ''
+})
+
+test('a damaged lab link falls back to the defaults with a message', async () => {
+  window.location.hash = '#p=@@'
+  render(<LabPage />)
+  await screen.findByText(/damaged or incomplete/)
+  expect(api.labPlans).toHaveBeenCalledWith(expect.objectContaining({ n_lanes: 5 }))
+  window.location.hash = ''
+})
