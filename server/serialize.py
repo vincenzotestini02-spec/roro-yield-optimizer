@@ -67,7 +67,10 @@ def kpis_out(k: Kpis) -> dict:
 
 
 def verdict_out(v: Verdict) -> dict:
-    return {**asdict(v), "text": v.text}
+    out = asdict(v)
+    out["moves"] = [{"booking_id": m.booking_id, "from_slot": str(m.from_slot), "to_slot": str(m.to_slot)}
+                    for m in v.moves]
+    return {**out, "accept": v.accept, "text": v.text}
 
 
 def parse_slot(text: str) -> Slot:

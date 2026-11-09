@@ -16,19 +16,52 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, replace
-from typing import Callable
+from typing import Callable, Literal, Sequence
 
 import numpy as np
 import pulp
 
 from .deck import DeckState
-from .models import Booking, Plan, Scenario, Vessel
+from .models import Booking, Plan, Scenario, Slot, Vessel
 from .optimizer import build_model
 from .simulator import ScenarioParams, sample_future
 
 SMART_LABEL = "Smart planner (no foresight)"
 ADVISOR_LABEL = SMART_LABEL
 NEUTRAL_SEED = 0  # the seed the advisor's ScenarioParams carry: never the game's own
+ACCEPT_SHARE = 0.6  # accept when the mean gain is positive and at least this share of futures pays off
+REJECT_SHARE = 0.8  # reject when the mean gain is negative and at least this share of futures loses
+Decision = Literal["accept", "reject", "your_call"]
+LABELS = {"accept": "Accept", "reject": "Reject", "your_call": "Your call"}
+
+
+def decide(gains: Sequence[float], accept_share: float = ACCEPT_SHARE,
+           reject_share: float = REJECT_SHARE) -> Decision:
+    """Accept or reject only when the sampled futures clearly agree; otherwise leave it to the planner."""
+    if not gains:
+        return "your_call"
+    mean = float(np.mean(gains))
+    favourable = sum(g > 1e-9 for g in gains) / len(gains)
+    unfavourable = sum(g < -1e-9 for g in gains) / len(gains)
+    if mean > 1e-9 and favourable >= accept_share:
+        return "accept"
+    if mean < -1e-9 and unfavourable >= reject_share:
+        return "reject"
+    return "your_call"
+
+
+def _euro(x: float) -> str:
+    return f"{'+' if x >= 0 else '−'}€{abs(x):,.0f}"
+
+
+@dataclass(frozen=True)
+class Move:
+    booking_id: str
+    from_slot: Slot
+    to_slot: Slot
+
+    def __str__(self) -> str:
+        return f"Move {self.booking_id} from {self.from_slot} to {self.to_slot}"
 
 
 def advisor_rng_seed(game_seed: int) -> int:
@@ -58,22 +91,34 @@ class PolicyView:
 @dataclass(frozen=True)
 class Verdict:
     booking_id: str
-    accept: bool
     feasible: bool
     n_pays_off: int
     k: int
     expected_gain_eur: float
     reason: str | None = None
+    decision: Decision = "accept"
+    pays_off_share: float = 0.0
+    gain_low: float = 0.0  # 10th percentile of the gains over the sampled futures
+    gain_high: float = 0.0  # 90th percentile
+    moves: tuple[Move, ...] = ()
+
+    @property
+    def accept(self) -> bool:
+        """What an automatic planner does: your_call counts as accept, a unit that cannot load never."""
+        return self.feasible and self.decision != "reject"
 
     @property
     def text(self) -> str:
         if not self.feasible:
             return f"Can't load: {self.reason}"
-        sign = "+" if self.expected_gain_eur >= 0 else "−"
-        gain = f"expected gain {sign}€{abs(self.expected_gain_eur):,.0f}"
-        if self.accept:
-            return f"Accept — pays off in {self.n_pays_off} of {self.k} futures, {gain}"
-        return f"Reject — pays off in only {self.n_pays_off} of {self.k} futures, {gain}"
+        only = " only" if self.decision == "reject" else ""
+        body = (f"{LABELS[self.decision]} — pays off in{only} {self.n_pays_off} of {self.k} futures, "
+                f"expected gain {_euro(self.expected_gain_eur)} "
+                f"(range {_euro(self.gain_low)} to {_euro(self.gain_high)})")
+        if self.moves:
+            steps = "; ".join(str(m) for m in self.moves)
+            return f"{steps}, then: {body}"
+        return body
 
 
 def _contract_m(bookings) -> float:
@@ -87,11 +132,12 @@ def _solve_value(prob: pulp.LpProblem) -> float:
     return float(pulp.value(prob.objective))
 
 
-def advise(view: PolicyView, k: int = 20) -> Verdict:
+def advise(view: PolicyView, k: int = 20, accept_share: float = ACCEPT_SHARE,
+           reject_share: float = REJECT_SHARE) -> Verdict:
     current, deck = view.current, view.deck.copy()  # defensive: never touch the caller's deck
     reason = deck.why_not(current)
     if reason is not None:
-        return Verdict(current.id, False, False, 0, 0, 0.0, reason)
+        return Verdict(current.id, False, 0, 0, 0.0, reason, decision="reject")
 
     slot = deck.best_slot(current)
     assert slot is not None, "why_not passed but best_slot found no slot"
@@ -114,7 +160,10 @@ def advise(view: PolicyView, k: int = 20) -> Verdict:
 
     mean_gain = float(np.mean(gains)) if gains else 0.0
     n_pays_off = int(sum(g > 1e-9 for g in gains))
-    return Verdict(current.id, mean_gain > 1e-9, True, n_pays_off, k, mean_gain, None)
+    low, high = (float(x) for x in np.percentile(gains, [10, 90])) if gains else (0.0, 0.0)
+    return Verdict(current.id, True, n_pays_off, k, mean_gain, None,
+                   decision=decide(gains, accept_share, reject_share),
+                   pays_off_share=n_pays_off / k if k else 0.0, gain_low=low, gain_high=high)
 
 
 def view_for(scenario: Scenario, params: ScenarioParams, deck: DeckState, index: int) -> PolicyView:
@@ -138,6 +187,8 @@ def smart_plan(
     params: ScenarioParams,
     k: int = 20,
     on_progress: Callable[[int, int], None] | None = None,
+    accept_share: float = ACCEPT_SHARE,
+    reject_share: float = REJECT_SHARE,
 ) -> tuple[Plan, list[Verdict]]:
     """Play every request in arrival order: accept per verdict, load at the auto slot."""
     deck = DeckState(scenario.vessel)
@@ -145,7 +196,8 @@ def smart_plan(
     rejected: list[str] = []
     verdicts: list[Verdict] = []
     for index, booking in enumerate(scenario.bookings):
-        verdict = advise(view_for(scenario, params, deck, index), k=k)
+        verdict = advise(view_for(scenario, params, deck, index), k=k,
+                         accept_share=accept_share, reject_share=reject_share)
         verdicts.append(verdict)
         if verdict.accept:
             deck.place(booking)

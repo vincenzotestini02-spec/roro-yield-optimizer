@@ -47,7 +47,7 @@ def test_infeasible_verdict():
     vessel = Vessel("V", "A → B", (Lane("L1", 70.0),), 5.0, 0, 0.5)  # 5 t deadweight
     s = Scenario(vessel, (_bk("B001", weight=10.0),), 0.0, 200.0)
     v = advise(view_for(s, ScenarioParams(), DeckState(vessel), 0))
-    assert v == Verdict("B001", False, False, 0, 0, 0.0, "would exceed max deadweight")
+    assert v == Verdict("B001", False, 0, 0, 0.0, "would exceed max deadweight", decision="reject")
     assert v.text == "Can't load: would exceed max deadweight"
 
 
@@ -92,10 +92,10 @@ def test_deterministic():
 
 
 def test_verdict_text():
-    assert Verdict("B1", True, True, 16, 20, 420.0, None).text == \
-        "Accept — pays off in 16 of 20 futures, expected gain +€420"
-    assert Verdict("B1", False, True, 4, 20, -310.0, None).text == \
-        "Reject — pays off in only 4 of 20 futures, expected gain −€310"
+    assert Verdict("B1", True, 16, 20, 420.0, None, gain_low=-50.0, gain_high=700.0).text == \
+        "Accept — pays off in 16 of 20 futures, expected gain +€420 (range −€50 to +€700)"
+    assert Verdict("B1", True, 4, 20, -310.0, None, decision="reject", gain_low=-600.0, gain_high=10.0).text == \
+        "Reject — pays off in only 4 of 20 futures, expected gain −€310 (range −€600 to +€10)"
 
 
 @pytest.mark.slow
