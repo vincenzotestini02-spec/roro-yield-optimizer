@@ -19,6 +19,7 @@ class GameSession:
         self.pending_index: int | None = None  # manual mode: accept clicked, slot not chosen yet
         self.deck = DeckState(scenario.vessel)
         self.log: list[tuple[str, str, Slot | None]] = []
+        self.moves = 0
         self._expected_cache: dict[int, float] = {}
 
     @property
@@ -104,7 +105,24 @@ class GameSession:
                 self.params, self.current.arrival_frac, remaining)
         return loaded + self._expected_cache[self.index] < self.scenario.contract_commitment_m - 1e-9
 
+    def move(self, booking_id: str, slot: Slot) -> str | None:
+        """Move a loaded unit to another zone. None on success, otherwise the reason; nothing changes then."""
+        if self.is_finished:
+            return "the ship has sailed"
+        if booking_id not in self.deck.loads:
+            return f"{booking_id} is not on the deck"
+        if slot not in self.deck.remaining_m:
+            return f"{slot} is not a zone of this ship"
+        b, old = self.deck.remove(booking_id)
+        if slot == old or slot not in self.deck.feasible_slots(b):
+            self.deck.place(b, old)
+            return "it is already there" if slot == old else "it does not fit there (space or stability)"
+        self.deck.place(b, slot)
+        self.moves += 1
+        self.log.append((booking_id, "moved", slot))
+        return None
+
     def to_plan(self) -> Plan:
         rejected = [booking_id for booking_id, action, _ in self.log if action == "rejected"]
         rejected += [b.id for b in self.queue[self.index:]]
-        return Plan(PLAYER_LABEL, dict(self.deck.placements), rejected)
+        return Plan(PLAYER_LABEL, dict(self.deck.placements), rejected, moves=self.moves)

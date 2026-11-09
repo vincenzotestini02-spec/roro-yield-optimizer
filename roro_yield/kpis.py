@@ -5,7 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .models import Plan, Scenario
+from .simulator import HANDLING_PER_UNIT
 from .stability import Ballast, moments, required_ballast, residual_heel_deg, residual_trim_m
+
+MOVE_COST_EUR = HANDLING_PER_UNIT  # one unit driven off and back on in another zone
 
 
 @dataclass(frozen=True)
@@ -26,6 +29,8 @@ class Kpis:
     ballast_cost: float = 0.0
     heel_deg: float = 0.0
     trim_m: float = 0.0
+    moves: int = 0
+    move_cost: float = 0.0
 
 
 def plan_ballast(scenario: Scenario, plan: Plan) -> tuple[Ballast, tuple[float, float]]:
@@ -56,7 +61,7 @@ def evaluate(scenario: Scenario, plan: Plan) -> Kpis:
         margin=margin,
         shortfall_m=shortfall,
         penalty=penalty,
-        objective=margin - penalty - ballast_cost,
+        objective=margin - penalty - ballast_cost - MOVE_COST_EUR * plan.moves,
         revpal=revenue / total_m if total_m > 0 else 0.0,
         deck_util_pct=used_m / total_m * 100 if total_m > 0 else 0.0,
         dwt_pct=(weight + ballast.total_t) / vessel.max_dwt_t * 100 if vessel.max_dwt_t > 0 else 0.0,
@@ -66,6 +71,8 @@ def evaluate(scenario: Scenario, plan: Plan) -> Kpis:
         ballast_cost=ballast_cost,
         heel_deg=residual_heel_deg(m_t, ballast, stab),
         trim_m=residual_trim_m(m_l, ballast, stab),
+        moves=plan.moves,
+        move_cost=MOVE_COST_EUR * plan.moves,
     )
 
 

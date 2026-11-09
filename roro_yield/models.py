@@ -175,6 +175,7 @@ class Plan:
     method: str
     placements: dict[str, Slot] = field(default_factory=dict)
     rejected: list[str] = field(default_factory=list)
+    moves: int = 0  # units moved after loading; each costs MOVE_COST_EUR in the objective
 
     @property
     def accepted_ids(self) -> list[str]:

@@ -142,6 +142,17 @@ class DeckState:
         self.loads[b.id] = (b, slot)
         return slot
 
+    def remove(self, booking_id: str) -> tuple[Booking, Slot]:
+        """Take a unit off the deck, giving back its space, weight, plug and moments."""
+        b, slot = self.loads.pop(booking_id)
+        lane = self.vessel.lane(slot.lane_id)
+        self.remaining_m[slot] += b.effective_length(self.vessel.lashing_gap_m)
+        self.weight_t -= b.weight_t
+        self.plugs_used -= int(b.is_reefer)
+        self._m_t -= b.weight_t * lane.y_m
+        self._m_l -= b.weight_t * lane.zone_x_m(slot.zone)
+        return b, slot
+
 
 def check_plan(scenario: Scenario, plan: Plan) -> list[str]:
     """Return every physical-constraint violation in `plan` (empty list = feasible)."""
