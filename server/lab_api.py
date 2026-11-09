@@ -14,10 +14,12 @@ from roro_yield.optimizer import solve_optimal
 from roro_yield.simulator import ScenarioParams, generate_scenario
 from server import jobs_api
 from server.config import ADVISOR_K, GAME_PARAMS
+from server.presets import PRESET_NOTE, PRESETS
 from server.reveal_api import plan_result, run_smart
 from server.runtime import get_jobs
 
 router = APIRouter(prefix="/api")
+LONG_RUN_THRESHOLD = 1200  # requests x lanes above which the smart plan takes minutes on 1 vCPU
 
 LIMITS: dict[str, tuple[float, float]] = {
     "n_requests": (30, 200),
@@ -33,6 +35,10 @@ LIMITS: dict[str, tuple[float, float]] = {
     "max_trim_m": (0.1, 2.0),
     "ballast_tank_cap_t": (0.0, 600.0),
     "ballast_cost_per_t": (0.0, 30.0),
+    "broken_stowage_pct": (0.0, 0.3),
+    "displacement_t": (2000.0, 40000.0),
+    "gm_m": (0.5, 4.0),
+    "mtc_tm_per_cm": (50.0, 600.0),
     "seed": (1, 10_000),
 }
 INTEGER_FIELDS = {"n_requests", "n_lanes", "reefer_plugs", "seed"}
@@ -67,7 +73,9 @@ def _smart(scenario, params: ScenarioParams, k: int, on_progress: Callable | Non
 def lab_defaults() -> dict:
     return {"values": {name: getattr(GAME_PARAMS, name) for name in LIMITS},
             "limits": {name: list(limit) for name, limit in LIMITS.items()},
-            "advisor_k": ADVISOR_K}
+            "advisor_k": ADVISOR_K,
+            "presets": PRESETS,
+            "note": PRESET_NOTE}
 
 
 @router.post("/lab/plans")
@@ -76,7 +84,8 @@ def lab_plans(body: LabParams) -> dict:
     scenario = generate_scenario(params)
 
     def output(result: tuple[Plan, Plan]) -> dict:
-        return {"fcfs": plan_result(scenario, result[0]), "optimal": plan_result(scenario, result[1])}
+        return {"fcfs": plan_result(scenario, result[0]), "optimal": plan_result(scenario, result[1]),
+                "smart_may_be_slow": params.n_requests * params.n_lanes > LONG_RUN_THRESHOLD}
 
     return {"job_id": jobs_api.submit(("lab", params), _plans, scenario, output=output)}
 

@@ -39,6 +39,8 @@ def deck_out(deck: DeckState) -> dict:
         "remaining_m": {str(slot): m for slot, m in deck.remaining_m.items()},
         "used_m": used,
         "capacity_m": vessel.total_lane_m,
+        "usable_m": sum(vessel.zone_capacity_m(lane) * ZONES for lane in vessel.lanes),
+        "broken_stowage_pct": vessel.broken_stowage_pct,
         "weight_t": deck.weight_t,
         "max_dwt_t": vessel.max_dwt_t,
         "plugs_used": deck.plugs_used,
