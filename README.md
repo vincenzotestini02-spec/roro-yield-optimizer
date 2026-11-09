@@ -103,6 +103,8 @@ The idea is the one behind slot-allocation revenue management in liner shipping:
 
 Here the planner knows how many requests will arrive, which a real planner would not. A tighter deck raises the percentage gain, not total profit. It only knows the demand distribution, not this sailing's future, so a single sailing can go against it; the advantage shows on average.
 
+**Live timings (v3 on Google Cloud Run, 1 vCPU, 2 GiB, measured 2026-11-09):** advisor verdict median 2.5 s, max 2.7 s over 10 verdicts; first plan (FCFS and optimizer) 3.3 s.
+
 ## Academic grounding
 
 The lane-assignment formulation is a simplified, one-deck version of the lane-based stowage model in
