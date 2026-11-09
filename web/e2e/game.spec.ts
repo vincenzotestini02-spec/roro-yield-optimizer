@@ -56,3 +56,36 @@ test('the game at phone width has no horizontal scroll', async ({ page }) => {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
   expect(overflow).toBeLessThanOrEqual(0)
 })
+
+test('the reveal share link opens the same result in a fresh page', async ({ page, browser }) => {
+  await page.goto('/')
+  const reject = page.getByRole('button', { name: 'Reject' })
+  while (!page.url().endsWith('/reveal')) {
+    if (await reject.isEnabled().catch(() => false)) await reject.click().catch(() => {})
+    await page.waitForTimeout(20)
+  }
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+  await page.getByRole('button', { name: 'Copy share link' }).click()
+  const url = await page.evaluate(() => navigator.clipboard.readText())
+  expect(url).toContain('/reveal#g=')
+  const other = await (await browser.newContext()).newPage()
+  await other.goto(url)
+  await expect(other.getByText(/Shared result/)).toBeVisible()
+  await expect(other.getByText('First come, first served').first()).toBeVisible()
+})
+
+test('the lab downloads a PDF', async ({ page }) => {
+  await page.goto('/lab')
+  await expect(page.getByRole('button', { name: 'Download PDF' })).toBeVisible({ timeout: 30_000 })
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Download PDF' }).click()
+  expect((await download).suggestedFilename()).toMatch(/\.pdf$/)
+})
+
+test('choosing the RoPax preset runs a comparison', async ({ page }) => {
+  test.setTimeout(300_000)  // may queue behind smart plans started by earlier tests
+  await page.goto('/lab')
+  await expect(page.getByRole('button', { name: 'Download PDF' })).toBeVisible({ timeout: 30_000 })
+  await page.getByLabel('Vessel').selectOption('ropax')
+  await expect(page.getByText(/Usable 1800 of 1800 lane-m/)).toBeVisible({ timeout: 240_000 })
+})

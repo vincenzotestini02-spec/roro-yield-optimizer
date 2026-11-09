@@ -55,11 +55,11 @@ v3 runs as its own Docker Space. Nothing here touches the Streamlit apps.
 
 ## v3 on Google Cloud Run (no local tools needed)
 
-Hugging Face now requires a paid plan for Docker Spaces, so v3 runs on Cloud Run. Cloud Run builds the image from GitHub with the repository's `Dockerfile`. It publishes the `v3-live` branch, which moves only when the owner decides to publish.
+Hugging Face now requires a paid plan for Docker Spaces, so v3 runs on Cloud Run. Cloud Run builds the image from GitHub with the repository's `Dockerfile`. The trigger publishes every push to the `v3` branch (the owner's choice). Work happens on a stage branch such as `v3-stage-1`, which reaches `v3` only when the owner approves. The `v3-live` branch is no longer used.
 
 1. Open <https://console.cloud.google.com>, create a project named `roro-yield-optimizer` and link a billing account. A card is needed even within the free tier.
 2. **Billing → Budgets & alerts → Create budget**: amount €1, alerts at 50% and 100%, email to you.
-3. **Cloud Run → Deploy container → Service**, then **Continuously deploy from a repository (source or function)** → **Set up with Cloud Build**. Connect GitHub, pick `roro-yield-optimizer`, branch `^v3-live$`, build type **Dockerfile**, source location `/Dockerfile`.
+3. **Cloud Run → Deploy container → Service**, then **Continuously deploy from a repository (source or function)** → **Set up with Cloud Build**. Connect GitHub, pick `roro-yield-optimizer`, branch `^v3$`, build type **Dockerfile**, source location `/Dockerfile`.
 4. Settings:
    - Service name `roro-yield-optimizer`, region `europe-west1 (Belgium)`.
    - Authentication: **Allow public access**.
@@ -69,4 +69,4 @@ Hugging Face now requires a paid plan for Docker Spaces, so v3 runs on Cloud Run
 5. Click **Create**. The first build takes a few minutes. When it ends, open the service URL and check `/api/health`.
 6. Time the live app: `.venv/Scripts/python.exe -m benchmarks.measure_live https://YOUR-SERVICE-URL --verdicts 10`.
 
-To publish a new version later: `git push origin v3:v3-live`.
+To publish a finished stage: `git push origin v3-stage-N:v3`, only with the owner's approval.

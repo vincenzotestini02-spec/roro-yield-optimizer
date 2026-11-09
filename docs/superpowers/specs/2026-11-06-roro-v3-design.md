@@ -53,7 +53,7 @@ Il planner perde contro FCFS soprattutto con domanda bassa (9 sailing su 30), mo
 
 ## 4. Vincoli
 
-- **Hosting (aggiornato 2026-11-09):** Hugging Face ha reso a pagamento le Space Docker ($9/mese), quindi il proprietario ha scelto Google Cloud Run, gratuito entro le soglie, con avviso di budget a 1 €, fatturazione basata sulle istanze e massimo 1 istanza. Misure dal vivo: verdetto mediano 2,5 s (max 2,7 s), primo piano 3,3 s. Testo originale: solo Hugging Face Spaces gratuito (2 vCPU, 16 GB, Docker). Lo spazio va in pausa dopo un periodo senza visite. Da verificare: tempo di riavvio e conservazione dei file. Il progetto non deve dipendere da file salvati sul server.
+- **Hosting (aggiornato 2026-11-09):** Hugging Face ha reso a pagamento le Space Docker ($9/mese), quindi il proprietario ha scelto Google Cloud Run, gratuito entro le soglie, con avviso di budget a 1 €, fatturazione basata sulle istanze e massimo 1 istanza. Misure dal vivo: verdetto mediano 2,5 s (max 2,7 s), primo piano 3,3 s. Il trigger pubblica ogni push su `v3`, quindi il lavoro di ogni tappa avviene su un branch dedicato e arriva su `v3` solo con l'ok del proprietario. Testo originale: solo Hugging Face Spaces gratuito (2 vCPU, 16 GB, Docker). Lo spazio va in pausa dopo un periodo senza visite. Da verificare: tempo di riavvio e conservazione dei file. Il progetto non deve dipendere da file salvati sul server.
 - **Costi:** nessuna spesa senza ok esplicito del proprietario.
 - **Solver:** HiGHS. Gurobi resta fuori dalla v3: la licenza sul PC è accademica e non commerciale.
 - **Lingua:** app, README e commenti del codice in inglese. Questo documento è in italiano perché il proprietario deve approvarlo.
