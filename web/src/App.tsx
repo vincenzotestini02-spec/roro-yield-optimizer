@@ -2,6 +2,7 @@ import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom'
 import { DemandPage } from './pages/DemandPage'
 import { GamePage } from './pages/GamePage'
 import { LabPage } from './pages/LabPage'
+import { PlannerPage } from './pages/PlannerPage'
 import { RevealPage } from './pages/RevealPage'
 
 export default function App() {
@@ -11,14 +12,16 @@ export default function App() {
         <header className="topbar">
           <div className="brand">RoRo Yield Optimizer</div>
           <nav aria-label="Main">
-            <NavLink to="/" end>Game</NavLink>
+            <NavLink to="/" end>Planner</NavLink>
+            <NavLink to="/game">Game</NavLink>
             <NavLink to="/lab">Lab</NavLink>
             <NavLink to="/demand">Demand levels</NavLink>
           </nav>
         </header>
         <main>
           <Routes>
-            <Route path="/" element={<GamePage />} />
+            <Route path="/" element={<PlannerPage />} />
+            <Route path="/game" element={<GamePage />} />
             <Route path="/reveal" element={<RevealPage />} />
             <Route path="/lab" element={<LabPage />} />
             <Route path="/demand" element={<DemandPage />} />

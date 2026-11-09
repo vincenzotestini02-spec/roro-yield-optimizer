@@ -138,11 +138,12 @@ export interface LabPlans {
 }
 
 export interface ExportBody {
-  source: 'lab' | 'game'
+  source: 'lab' | 'game' | 'planner'
   params?: LabValues
+  state?: { vessel: PlannerVessel; bookings: PlannerBookingIn[]; placements: Record<string, string> }
   seed?: number
   decisions?: Decision[]
-  plan_key: 'fcfs' | 'optimal' | 'smart' | 'you' | 'best'
+  plan_key: 'fcfs' | 'optimal' | 'smart' | 'you' | 'best' | 'planner'
 }
 
 export interface LabSmart {
@@ -174,4 +175,69 @@ export interface SavedGame {
   seed: number
   decisions: Decision[]
   verdicts: Record<string, Verdict>
+}
+
+export interface PlannerBookingIn {
+  booking_id: string
+  customer: string
+  unit_type: string
+  length_m: number
+  weight_t: number
+  discharge_port: string
+  segment: 'contract' | 'spot'
+  is_reefer: boolean
+  rate_per_m: number | null
+  reefer_fee: number | null
+  height_m: number | null
+  axle_count: number | null
+  on_board: boolean
+}
+
+export type PlannerVessel = { preset: string } & Record<string, number | string>
+
+export interface Demand {
+  level: 'low' | 'normal' | 'high'
+  contract_share: number
+  spot_rate_multiplier: number
+  window_days: number
+  hours_to_departure: number
+}
+
+export interface PlannerLogEntry {
+  booking_id: string
+  decision: 'accepted' | 'rejected'
+  verdict: string | null
+}
+
+export interface PlannerSession {
+  vessel: PlannerVessel
+  bookings: PlannerBookingIn[]
+  placements: Record<string, string>
+  demand: Demand
+  log: PlannerLogEntry[]
+}
+
+export interface PlannerPlan {
+  placements: Record<string, string>
+  excluded: { booking_id: string; reason: string }[]
+  moved: string[]
+  deck: Deck
+  kpis: Kpis
+  revenue_known: boolean
+}
+
+export interface RowError {
+  row: number
+  column: string
+  message: string
+}
+
+export interface ImportResult {
+  bookings: PlannerBookingIn[]
+  errors: RowError[]
+  warnings: string[]
+}
+
+export interface PlannerVerdict extends Verdict {
+  assumption: string
 }

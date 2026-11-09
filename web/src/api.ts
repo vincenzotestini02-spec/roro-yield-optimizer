@@ -1,5 +1,6 @@
 import type {
-  Decision, DemandTable, ExportBody, GameState, LabDefaults, LabValues, RevealResult,
+  Decision, Demand, DemandTable, ExportBody, GameState, ImportResult, LabDefaults, LabValues,
+  PlannerBookingIn, PlannerPlan, PlannerVessel, RevealResult,
 } from './types'
 
 const POLL_MS = 1000
@@ -44,6 +45,12 @@ function post<T>(path: string, body: unknown): Promise<T> {
 }
 
 interface Job { job_id: string }
+
+export interface PlannerStateBody {
+  vessel: PlannerVessel
+  bookings: PlannerBookingIn[]
+  placements: Record<string, string>
+}
 interface JobState<T> { status: string; progress: number; result: T | null; error: string | null }
 
 export const api = {
@@ -56,6 +63,16 @@ export const api = {
   labPlans: (params: LabValues) => post<Job>('/api/lab/plans', params),
   labSmart: (params: LabValues) => post<Job>('/api/lab/smart', params),
   demandTable: () => request<DemandTable>('/api/demand-table'),
+  importBookings: async (file: File): Promise<ImportResult> => {
+    const form = new FormData()
+    form.append('file', file)
+    return request<ImportResult>('/api/planner/import', { method: 'POST', body: form })
+  },
+  plannerPlan: (state: PlannerStateBody) => post<Job>('/api/planner/plan', state),
+  plannerMove: (state: PlannerStateBody, bookingId: string, slot: string) =>
+    post<PlannerPlan>('/api/planner/move', { ...state, booking_id: bookingId, slot }),
+  plannerAdvise: (state: PlannerStateBody, requestBooking: PlannerBookingIn, demand: Demand) =>
+    post<Job>('/api/planner/advise', { ...state, request: requestBooking, demand }),
   cancelJob: (id: string) => request<void>(`/api/jobs/${id}`, { method: 'DELETE', keepalive: true }),
   exportPlan: async (body: ExportBody, format: 'pdf' | 'csv'): Promise<Blob> => {
     let response: Response

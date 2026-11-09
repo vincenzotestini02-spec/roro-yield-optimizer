@@ -111,10 +111,10 @@ export function RevealPage() {
   }, [game, attempt])
 
   if (sharedCode !== null && game === null) {
-    return <p className="notice">This link is damaged or incomplete. <Link to="/">Play a sailing</Link></p>
+    return <p className="notice">This link is damaged or incomplete. <Link to="/game">Play a sailing</Link></p>
   }
   if (game === null || !ready) {
-    return <p>Nothing to reveal yet. <Link to="/">Play a sailing</Link></p>
+    return <p>Nothing to reveal yet. <Link to="/game">Play a sailing</Link></p>
   }
 
   const entries: [PlanResult, ExportBody['plan_key']][] = reveal === null ? [] : [
@@ -195,8 +195,8 @@ export function RevealPage() {
       )}
       <div className="row">
         {sharedCode === null
-          ? <button onClick={() => { clearGame(); navigate('/') }}>Play another sailing</button>
-          : <button onClick={() => navigate('/')}>Play your own sailing</button>}
+          ? <button onClick={() => { clearGame(); navigate('/game') }}>Play another sailing</button>
+          : <button onClick={() => navigate('/game')}>Play your own sailing</button>}
         <button onClick={() => void share()}>Copy share link</button>
         <button className="primary" onClick={() => navigate('/lab')}>Open the Lab</button>
       </div>
