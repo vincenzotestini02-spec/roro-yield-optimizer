@@ -15,6 +15,17 @@ Operations wants a full, safe deck; Commercial wants the highest-paying cargo; K
 Accepting bookings first come, first served (FCFS) lets early, low-rate cargo crowd out late, high-rate spot cargo.
 The question is which bookings to accept, and where to put them, so the sailing earns the most per lane-metre without breaking a contract.
 
+## Planner (v3)
+
+The home page is a planning tool for real bookings:
+
+1. Pick the vessel and the lost space (15% by default), download the Excel template, fill it in and upload it. Every row is checked; if any row has a problem, nothing is imported and each error is listed with its row and column.
+2. The planner loads every accepted booking it can. A booking that does not fit is never dropped silently: it is listed with the reason.
+3. Mark units as on board (they never move), move a unit by hand to another zone, and download the plan as PDF or CSV, or save the session as a file.
+4. For a new request, enter its price and ask the advisor. The verdict always shows its demand assumption (for example `Assumption: high demand, 45% contract`). Accepting it re-plans; the units that moved are listed.
+
+Template columns: `booking_id`, `customer`, `unit_type`, `length_m`, `weight_t`, `discharge_port` (required); `segment`, `is_reefer`, `rate_per_m`, `reefer_fee`, `height_m`, `axle_count`, `on_board` (optional). At most 500 rows and 5 MB; the file is read in memory and never stored. Several discharge ports are accepted but planned as one until a later version.
+
 ## How to play
 
 1. **① Play.** 60 booking requests arrive one by one for tomorrow's sailing (MV Nordic Bridge, Esbjerg → Immingham, 5 lanes × 120 m, a busy sailing with demand at 130% of the deck, each lane split into 4 zones from stern to bow). Accept or reject each, and choose **"🤖 App places them"** or **"✋ I place them"** (you pick the zone). Switch on **"💡 Advisor"** to see a verdict on every request. The deck drawing and the gauges (lane-metres, deadweight, reefer plugs, contract metres, margin, heel, trim, ballast) update live. Units that do not fit or would break the stability limits are refused, and you are warned when the contract guarantee is at risk.

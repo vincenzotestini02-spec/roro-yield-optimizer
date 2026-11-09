@@ -253,7 +253,7 @@ Ogni tappa è rilasciabile e passa test e benchmark prima della successiva.
 |---|---|---|
 | **0. Base** | FastAPI, React, gioco alla pari con la v2, Docker, primo deploy, ponte 5 × 120 m e tabella su 3 livelli di domanda | link HF attivo; tempi e riavvio misurati |
 | **1. Funzioni rapide** | spazio perso, navi predefinite, PDF, CSV, link | export verificati |
-| **2. Planner** | modello Excel, validazione, primo piano, esclusioni spiegate, nuove richieste, rifacimento piano | un Excel d'esempio completa il flusso |
+| **2. Planner** (fatta 2026-11-09: il gioco è su `/game`, la sessione si salva in un file `.json` invece che in un link) | modello Excel, validazione, primo piano, esclusioni spiegate, nuove richieste, rifacimento piano | un Excel d'esempio completa il flusso |
 | **3. Decisioni** | Advisor a tre risposte, intervalli, spostamenti nel gioco e nel planner, test del valore atteso | criteri della sezione 12 |
 | **4. Riserve** | spazio riservato per cliente | test con e senza riserve |
 | **5. Porti** | più porti di scarico e blocchi | ordine di scarico verificato su casi costruiti |
