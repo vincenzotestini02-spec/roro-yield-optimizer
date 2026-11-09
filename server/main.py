@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from server import export_api, game_api, jobs_api, lab_api, reveal_api
+from server import export_api, game_api, importer, jobs_api, lab_api, reveal_api
 from server.jobs import QueueFull
 
 
@@ -44,6 +44,7 @@ def create_app() -> FastAPI:
     app.include_router(reveal_api.router)
     app.include_router(lab_api.router)
     app.include_router(export_api.router)
+    app.include_router(importer.router)
     if (WEB_DIST / "index.html").exists():
         app.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")
 
