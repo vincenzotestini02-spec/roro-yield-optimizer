@@ -6,7 +6,8 @@ test('full game from first request to reveal', async ({ page }) => {
   await page.getByRole('button', { name: 'Accept' }).click()
   await expect(page.getByText(/Request 2 of 60/)).toBeVisible()
   const reject = page.getByRole('button', { name: 'Reject' })
-  while (!page.url().endsWith('/reveal')) {
+  const revealed = page.getByRole('heading', { name: /The ship has sailed/ })
+  while (!(await revealed.isVisible().catch(() => false))) {
     if (await reject.isEnabled().catch(() => false)) await reject.click().catch(() => {})
     await page.waitForTimeout(20)
   }
@@ -60,7 +61,8 @@ test('the game at phone width has no horizontal scroll', async ({ page }) => {
 test('the reveal share link opens the same result in a fresh page', async ({ page, browser }) => {
   await page.goto('/game')
   const reject = page.getByRole('button', { name: 'Reject' })
-  while (!page.url().endsWith('/reveal')) {
+  const revealed = page.getByRole('heading', { name: /The ship has sailed/ })
+  while (!(await revealed.isVisible().catch(() => false))) {
     if (await reject.isEnabled().catch(() => false)) await reject.click().catch(() => {})
     await page.waitForTimeout(20)
   }
