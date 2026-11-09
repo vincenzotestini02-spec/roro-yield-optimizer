@@ -23,6 +23,7 @@ import pulp
 
 from .deck import DeckState
 from .models import Booking, Plan, Scenario, Slot, Vessel
+from .kpis import MOVE_COST_EUR
 from .optimizer import build_model
 from .simulator import ScenarioParams, sample_future
 
@@ -121,6 +122,59 @@ class Verdict:
         return body
 
 
+# Reasons a unit cannot load that moving other units can fix.
+NOT_FIXED_BY_MOVES = ("doesn't fit any lane", "no reefer plug available", "would exceed max deadweight")
+
+
+def _apply(deck: DeckState, moves: Sequence[Move]) -> DeckState:
+    trial = deck.copy()
+    for m in moves:
+        b, _ = trial.remove(m.booking_id)
+        trial.place(b, m.to_slot)
+    return trial
+
+
+def _single_moves(deck: DeckState, units: list) -> list[Move]:
+    """Every feasible move of one unit to another zone, most free space first."""
+    out = []
+    order = sorted(deck.remaining_m, key=lambda s: -deck.remaining_m[s])
+    for b, slot in units:
+        trial = deck.copy()
+        trial.remove(b.id)
+        for target in order:
+            if target != slot and target in trial.feasible_slots(b):
+                out.append(Move(b.id, slot, target))
+    return out
+
+
+def find_moves(deck: DeckState, b: Booking, max_moves: int = 2, budget: int = 400) -> tuple[Move, ...] | None:
+    """The shortest sequence of moves (at most `max_moves`) after which `b` can be loaded, or None.
+
+    Only feasibility checks, no solver: at most `budget` sequences are tried, short units first.
+    """
+    units = sorted(deck.loads.values(), key=lambda bs: bs[0].length_m)
+    tried = 0
+    first_moves = _single_moves(deck, units)
+    for m in first_moves:
+        tried += 1
+        if tried > budget:
+            return None
+        if _apply(deck, [m]).why_not(b) is None:
+            return (m,)
+    if max_moves < 2:
+        return None
+    for m in first_moves:
+        after = _apply(deck, [m])
+        others = [(u, s) for u, s in sorted(after.loads.values(), key=lambda bs: bs[0].length_m) if u.id != m.booking_id]
+        for second in _single_moves(after, others):
+            tried += 1
+            if tried > budget:
+                return None
+            if _apply(after, [second]).why_not(b) is None:
+                return (m, second)
+    return None
+
+
 def _contract_m(bookings) -> float:
     return sum(b.length_m for b in bookings if b.segment == "contract")
 
@@ -133,11 +187,27 @@ def _solve_value(prob: pulp.LpProblem) -> float:
 
 
 def advise(view: PolicyView, k: int = 20, accept_share: float = ACCEPT_SHARE,
-           reject_share: float = REJECT_SHARE) -> Verdict:
+           reject_share: float = REJECT_SHARE, suggest_moves: bool = True) -> Verdict:
     current, deck = view.current, view.deck.copy()  # defensive: never touch the caller's deck
     reason = deck.why_not(current)
-    if reason is not None:
-        return Verdict(current.id, False, 0, 0, 0.0, reason, decision="reject")
+    if reason is None:
+        return _judge(view, deck, k, accept_share, reject_share)
+    cannot = Verdict(current.id, False, 0, 0, 0.0, reason, decision="reject")
+    if not suggest_moves or reason.startswith(NOT_FIXED_BY_MOVES):
+        return cannot
+    moves = find_moves(deck, current)
+    if moves is None:
+        return cannot
+    moved = _judge(view, _apply(deck, moves), k, accept_share, reject_share, cost=MOVE_COST_EUR * len(moves))
+    if moved.expected_gain_eur <= 1e-9:
+        return cannot  # making room costs more than the unit is expected to earn
+    return replace(moved, moves=moves)
+
+
+def _judge(view: PolicyView, deck: DeckState, k: int, accept_share: float, reject_share: float,
+           cost: float = 0.0) -> Verdict:
+    """The verdict on loading `view.current` onto `deck`, with `cost` taken off every future's gain."""
+    current = view.current
 
     slot = deck.best_slot(current)
     assert slot is not None, "why_not passed but best_slot found no slot"
@@ -156,7 +226,7 @@ def advise(view: PolicyView, k: int = 20, accept_share: float = ACCEPT_SHARE,
         for loaded in (1, 0):  # (a) current placed at its auto slot, (b) current rejected
             model.forced.lowBound = model.forced.upBound = loaded
             values.append(_solve_value(model.prob))
-        gains.append(values[0] - values[1])
+        gains.append(values[0] - values[1] - cost)
 
     mean_gain = float(np.mean(gains)) if gains else 0.0
     n_pays_off = int(sum(g > 1e-9 for g in gains))
@@ -197,7 +267,7 @@ def smart_plan(
     verdicts: list[Verdict] = []
     for index, booking in enumerate(scenario.bookings):
         verdict = advise(view_for(scenario, params, deck, index), k=k,
-                         accept_share=accept_share, reject_share=reject_share)
+                         accept_share=accept_share, reject_share=reject_share, suggest_moves=False)
         verdicts.append(verdict)
         if verdict.accept:
             deck.place(booking)
