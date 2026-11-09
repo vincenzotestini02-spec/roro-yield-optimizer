@@ -143,3 +143,45 @@ test('a damaged lab link falls back to the defaults with a message', async () =>
   expect(api.labPlans).toHaveBeenCalledWith(expect.objectContaining({ n_lanes: 5 }))
   window.location.hash = ''
 })
+
+test('a late answer for older settings never replaces the newer one', async () => {
+  let releaseOld: (v: unknown) => void = () => {}
+  vi.mocked(api.labPlans).mockImplementation(async (params) => ({ job_id: params.n_lanes === 16 ? 'old' : 'new' }))
+  vi.mocked(pollJob).mockImplementation((id: string) => {
+    if (id === 'old') return new Promise((r) => { releaseOld = r })
+    return Promise.resolve({ ...plans, optimal: planResult('Demo best', 5000) })
+  })
+  render(<LabPage />)
+  await screen.findByRole('columnheader', { name: 'Demo best' })
+  await userEvent.selectOptions(screen.getByLabelText('Vessel'), 'shortsea')
+  await userEvent.selectOptions(screen.getByLabelText('Vessel'), 'demo')
+  await screen.findByRole('columnheader', { name: 'Demo best' })
+  releaseOld({ ...plans, optimal: planResult('Short-sea best', 9000) })
+  await new Promise((r) => setTimeout(r, 20))
+  expect(screen.queryByRole('columnheader', { name: 'Short-sea best' })).toBeNull()
+})
+
+test('units that no longer fit any zone are explained', async () => {
+  const unfit = { count: 7, ids: [], reason: "longer than any zone after lost space, so they can't be loaded" }
+  vi.mocked(pollJob).mockResolvedValue({ ...plans, fcfs: { ...plans.fcfs, unfit } })
+  render(<LabPage />)
+  await screen.findByText(/7 requests are longer than any zone after lost space/)
+})
+
+test('leaving the lab cancels a running smart plan', async () => {
+  const { unmount } = render(<LabPage />)
+  await screen.findByRole('columnheader', { name: 'Optimizer' })
+  vi.mocked(pollJob).mockImplementation(() => new Promise(() => {}))
+  await userEvent.click(screen.getByRole('button', { name: /Run the smart planner/ }))
+  await screen.findByRole('button', { name: 'Cancel' })
+  unmount()
+  await waitFor(() => expect(api.cancelJob).toHaveBeenCalledWith('s1'))
+})
+
+test('a queued calculation says it is waiting for the server', async () => {
+  render(<LabPage />)
+  await screen.findByRole('columnheader', { name: 'Optimizer' })
+  vi.mocked(pollJob).mockImplementation(() => new Promise(() => {}))
+  await userEvent.click(screen.getByRole('button', { name: /Run the smart planner/ }))
+  await screen.findByText(/waiting for a free slot/i)
+})

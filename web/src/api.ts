@@ -56,7 +56,7 @@ export const api = {
   labPlans: (params: LabValues) => post<Job>('/api/lab/plans', params),
   labSmart: (params: LabValues) => post<Job>('/api/lab/smart', params),
   demandTable: () => request<DemandTable>('/api/demand-table'),
-  cancelJob: (id: string) => request<void>(`/api/jobs/${id}`, { method: 'DELETE' }),
+  cancelJob: (id: string) => request<void>(`/api/jobs/${id}`, { method: 'DELETE', keepalive: true }),
   exportPlan: async (body: ExportBody, format: 'pdf' | 'csv'): Promise<Blob> => {
     let response: Response
     try {

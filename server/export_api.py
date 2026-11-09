@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, model_validator
 from roro_yield.fcfs import solve_fcfs
 from roro_yield.manifest import manifest_csv
 from roro_yield.models import Plan, Scenario
+from roro_yield.optimizer import solve_optimal
 from roro_yield.simulator import ScenarioParams
 from server.config import ADVISOR_K
 from server.exports import plan_pdf
@@ -20,6 +21,7 @@ from server.schemas import MAX_DECISIONS, Decision
 
 router = APIRouter(prefix="/api/export")
 NOT_READY = "This plan is not ready yet. Wait for it, then download."
+SMART_GONE = "The smart plan is no longer on the server. Run the smart planner again, then download."
 LAB_PLANS = {"fcfs", "optimal", "smart"}
 GAME_PLANS = {"you", "fcfs", "smart", "best"}
 
@@ -50,17 +52,27 @@ def resolve_game_plan(seed: int, decisions: list[Decision], plan_key: str) -> tu
         return scenario, session.to_plan()
     if plan_key == "fcfs":
         return scenario, solve_fcfs(scenario)
+    smart_key = ("smart", seed, ADVISOR_K)
+    smart = jobs.result(smart_key)
     if plan_key == "smart":
-        plan = jobs.result(("smart", seed, ADVISOR_K))
-    else:
-        result = jobs.result(("best", seed, decisions_key(decisions)))
-        plan = None if result is None else result[0]
-    return None if plan is None else (scenario, plan)
+        if smart is None:
+            raise HTTPException(409, NOT_READY if jobs.status(smart_key) in ("queued", "running") else SMART_GONE)
+        return scenario, smart
+    result = jobs.result(("best", seed, decisions_key(decisions)))
+    if result is not None:
+        return scenario, result[0]
+    # The best plan is gone or was never asked for: rebuild it from the plans still at hand.
+    you = session.to_plan()
+    return scenario, solve_optimal(scenario, candidates=(you,) + (() if smart is None else (smart,)))
 
 
 def _resolve(req: ExportRequest) -> tuple[Scenario, Plan, list[str]]:
     if req.source == "lab":
-        found = resolve_lab_plan(ScenarioParams(**req.params.model_dump()), req.plan_key)
+        params = ScenarioParams(**req.params.model_dump())
+        found = resolve_lab_plan(params, req.plan_key, rebuild=True)
+        if found is None:  # only the smart plan is never rebuilt
+            status = get_jobs().status(("lab_smart", params, ADVISOR_K))
+            raise HTTPException(409, NOT_READY if status in ("queued", "running") else SMART_GONE)
         assumptions = [f"Lab settings, seed {req.params.seed}, {req.params.n_requests} requests.",
                        f"Lost space (broken stowage): {req.params.broken_stowage_pct:.0%}."]
     else:

@@ -100,6 +100,7 @@ export interface PlanResult {
   deck: Deck
   rejected: Booking[]
   sold_m: { contract: number; spot: number }
+  unfit: { count: number; ids: string[]; reason: string }
 }
 
 export interface RevealResult {

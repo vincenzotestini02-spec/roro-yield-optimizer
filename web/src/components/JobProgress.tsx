@@ -8,6 +8,7 @@ export function JobProgress({ label, progress, onCancel }: { label: string; prog
         aria-valuenow={Math.round(progress * 100)}>
         <div style={{ width: `${progress * 100}%` }} />
       </div>
+      {progress <= 0 && <p className="small muted">Waiting for a free slot on the server. Other calculations may be running.</p>}
       {onCancel && <div><button onClick={onCancel}>Cancel</button></div>}
     </div>
   )

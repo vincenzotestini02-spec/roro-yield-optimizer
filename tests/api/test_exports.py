@@ -27,9 +27,9 @@ def test_game_csv_lists_loaded_units(client, finished_game):
     assert r.status_code == 200 and r.text.startswith("lane,zone,position") and r.text.count("\n") > 10
 
 
-def test_export_before_the_plan_exists_is_409(client, finished_game):
-    r = client.post("/api/export/pdf", json={"source": "game", **finished_game, "plan_key": "best"})
-    assert r.status_code == 409 and "not ready" in r.json()["detail"]
+def test_export_of_a_missing_smart_plan_is_409(client, finished_game):
+    r = client.post("/api/export/pdf", json={"source": "game", **finished_game, "plan_key": "smart"})
+    assert r.status_code == 409 and "again" in r.json()["detail"]
 
 
 def test_wrong_combination_is_422(client, finished_game):
@@ -58,3 +58,20 @@ def test_pdf_of_a_big_vessel_fits_on_pages(client, lab_values, wait):
     wait(client, client.post("/api/lab/plans", json=values).json()["job_id"], timeout=180)
     r = client.post("/api/export/pdf", json={"source": "lab", "params": values, "plan_key": "fcfs"})
     assert r.status_code == 200 and len(PdfReader(io.BytesIO(r.content)).pages) >= 2
+
+
+def test_lab_export_rebuilds_a_plan_the_server_forgot(client, lab_values):
+    values = {**lab_values, "seed": 4321}  # never computed in this process
+    r = client.post("/api/export/csv", json={"source": "lab", "params": values, "plan_key": "optimal"})
+    assert r.status_code == 200 and r.text.startswith("lane,zone,position")
+
+
+def test_game_best_export_rebuilds_when_the_job_is_gone(client, finished_game):
+    r = client.post("/api/export/csv", json={"source": "game", **finished_game, "plan_key": "best"})
+    assert r.status_code == 200
+
+
+def test_a_gone_smart_plan_says_to_run_it_again(client, lab_values):
+    values = {**lab_values, "seed": 4322}
+    r = client.post("/api/export/pdf", json={"source": "lab", "params": values, "plan_key": "smart"})
+    assert r.status_code == 409 and "run the smart planner again" in r.json()["detail"].lower()

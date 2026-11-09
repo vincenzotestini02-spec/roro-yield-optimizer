@@ -102,8 +102,12 @@ def lab_smart(body: LabParams) -> dict:
     return {"job_id": jobs_api.submit(key, _smart, scenario, params, ADVISOR_K, output=output)}
 
 
-def resolve_lab_plan(params: ScenarioParams, plan_key: str) -> tuple[Scenario, Plan] | None:
-    """The finished plan for these Lab settings, or None if it has not been computed."""
+def resolve_lab_plan(params: ScenarioParams, plan_key: str, rebuild: bool = False) -> tuple[Scenario, Plan] | None:
+    """The finished plan for these Lab settings, or None if it has not been computed.
+
+    With `rebuild`, FCFS and the optimizer are recomputed when the server no longer has them
+    (restart, scale to zero, expiry). The smart plan takes minutes, so it is never rebuilt here.
+    """
     jobs = get_jobs()
     smart = jobs.result(("lab_smart", params, ADVISOR_K))
     plans = jobs.result(("lab", params))
@@ -114,6 +118,8 @@ def resolve_lab_plan(params: ScenarioParams, plan_key: str) -> tuple[Scenario, P
         plan = smart[1]
     elif plans is not None and plan_key != "smart":
         plan = plans[0] if plan_key == "fcfs" else plans[1]
+    if plan is None and rebuild and plan_key != "smart":
+        plan = _plans(generate_scenario(params))[0 if plan_key == "fcfs" else 1]
     return None if plan is None else (generate_scenario(params), plan)
 
 

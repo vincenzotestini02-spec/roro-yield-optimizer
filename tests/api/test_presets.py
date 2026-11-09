@@ -50,3 +50,15 @@ def test_big_settings_warn_that_the_smart_plan_is_slow(client, defaults, wait):
 def test_demo_settings_do_not_warn(client, defaults, wait):
     plans = wait(client, client.post("/api/lab/plans", json=defaults).json()["job_id"])["result"]
     assert plans["smart_may_be_slow"] is False
+
+
+def test_units_too_long_after_lost_space_are_listed(client, defaults, wait):
+    values = {**defaults, "lane_length_m": 80.0, "broken_stowage_pct": 0.3}
+    plans = wait(client, client.post("/api/lab/plans", json=values).json()["job_id"])["result"]
+    unfit = plans["fcfs"]["unfit"]
+    assert unfit["count"] > 0 and "longer than any zone" in unfit["reason"]
+
+
+def test_no_unfit_units_on_the_demo(client, defaults, wait):
+    plans = wait(client, client.post("/api/lab/plans", json=defaults).json()["job_id"])["result"]
+    assert plans["fcfs"]["unfit"]["count"] == 0

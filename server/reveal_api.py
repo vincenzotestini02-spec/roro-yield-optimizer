@@ -29,6 +29,17 @@ class BestRequest(GameRequest):
     smart_job: str
 
 
+UNFIT_REASON = "longer than any zone after lost space, so they can't be loaded"
+
+
+def unfit_units(scenario: Scenario) -> dict:
+    """Requests no zone can hold at all: with lost space these explain a sudden drop in loads."""
+    vessel = scenario.vessel
+    longest_zone = max(vessel.zone_capacity_m(lane) for lane in vessel.lanes)
+    ids = [b.id for b in scenario.bookings if b.effective_length(vessel.lashing_gap_m) > longest_zone + 1e-9]
+    return {"count": len(ids), "ids": ids, "reason": UNFIT_REASON}
+
+
 def plan_result(scenario: Scenario, plan: Plan) -> dict:
     rejected = [scenario.booking(i) for i in plan.rejected]
     return {
@@ -36,6 +47,7 @@ def plan_result(scenario: Scenario, plan: Plan) -> dict:
         "kpis": kpis_out(evaluate(scenario, plan)),
         "deck": deck_out(plan_deck(scenario, plan)),
         "rejected": [booking_out(b) for b in rejected],
+        "unfit": unfit_units(scenario),
         "sold_m": {
             segment: sum(b.length_m for b in map(scenario.booking, plan.placements) if b.segment == segment)
             for segment in ("contract", "spot")

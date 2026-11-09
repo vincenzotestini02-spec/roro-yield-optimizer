@@ -89,7 +89,8 @@ export function LabPage() {
     const url = `${window.location.origin}/lab#p=${encodeLab(ranValues)}`
     setCopied((await copyText(url)) ? 'Link copied.' : url)
   }
-  const smartRun = useRef<{ id: string; abort: AbortController } | null>(null)
+  const smartRun = useRef<{ id: string | null; abort: AbortController } | null>(null)
+  const latestCompare = useRef(0)
 
   const stopSmart = useCallback(() => {
     const run = smartRun.current
@@ -97,22 +98,35 @@ export function LabPage() {
     smartRun.current = null
     run.abort.abort()
     setSmartProgress(null)
-    void api.cancelJob(run.id)?.catch(() => {})
+    if (run.id !== null) void api.cancelJob(run.id)?.catch(() => {})
   }, [])
 
+  useEffect(() => {
+    // Free the server when the visitor leaves the page or closes the tab mid-run.
+    window.addEventListener('pagehide', stopSmart)
+    return () => {
+      window.removeEventListener('pagehide', stopSmart)
+      stopSmart()
+    }
+  }, [stopSmart])
+
   const compare = useCallback(async (params: LabValues) => {
+    const request = ++latestCompare.current  // only the newest comparison may change the page
     stopSmart()
+    setConfirmSlow(false)
     setComputing(true)
     setError(null)
     setSmart(null)
     try {
       const { job_id } = await api.labPlans(params)
-      setPlans(await pollJob<LabPlans>(job_id, () => {}))
+      const result = await pollJob<LabPlans>(job_id, () => {})
+      if (request !== latestCompare.current) return
+      setPlans(result)
       setRanValues(params)
     } catch (e) {
-      setError(message(e))
+      if (request === latestCompare.current) setError(message(e))
     } finally {
-      setComputing(false)
+      if (request === latestCompare.current) setComputing(false)
     }
   }, [stopSmart])
 
@@ -148,9 +162,15 @@ export function LabPage() {
     const abort = new AbortController()
     setError(null)
     setSmartProgress(0)
+    const run: { id: string | null; abort: AbortController } = { id: null, abort }
+    smartRun.current = run
     try {
       const { job_id } = await api.labSmart(ranValues)
-      smartRun.current = { id: job_id, abort }
+      if (abort.signal.aborted) {  // cancelled while the request was on its way
+        void api.cancelJob(job_id)?.catch(() => {})
+        return
+      }
+      run.id = job_id
       setSmart(await pollJob<LabSmart>(job_id, setSmartProgress, abort.signal))
     } catch (e) {
       if (!abort.signal.aborted) setError(message(e))
@@ -228,6 +248,9 @@ export function LabPage() {
                 <div className="card"><span className="small muted">Extra margin per sailing</span><span className="value">{euro(best.kpis.objective - plans.fcfs.kpis.objective)}</span></div>
                 <div className="card"><span className="small muted">RevPAL, best possible</span><span className="value">€{best.kpis.revpal.toFixed(1)}/lm</span></div>
               </div>
+              {plans.fcfs.unfit.count > 0 && (
+                <p className="notice">{plans.fcfs.unfit.count} requests are {plans.fcfs.unfit.reason}.</p>
+              )}
               {smartProgress !== null
                 ? <JobProgress label="The smart planner is playing this sailing" progress={smartProgress} onCancel={cancelSmart} />
                 : !smart && <div><button onClick={askSmart}>Run the smart planner (K = {defaults?.advisor_k} futures per request)</button></div>}

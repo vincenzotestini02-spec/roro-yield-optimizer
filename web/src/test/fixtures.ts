@@ -31,4 +31,5 @@ export const kpis = (method: string, objective: number): Kpis => ({
 
 export const planResult = (method: string, objective: number): PlanResult => ({
   method, kpis: kpis(method, objective), deck: deck(), rejected: [], sold_m: { contract: 200, spot: 300 },
+  unfit: { count: 0, ids: [], reason: '' },
 })
