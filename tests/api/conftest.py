@@ -35,3 +35,8 @@ def finished_game(client):
         if state["finished"]:
             return {"seed": 3, "decisions": decisions}
         decisions.append({"booking_id": state["current"]["id"], "action": "reject", "slot": None})
+
+
+@pytest.fixture
+def lab_values(client):
+    return client.get("/api/lab/defaults").json()["values"]

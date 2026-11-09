@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, create_model
 
 from roro_yield.fcfs import solve_fcfs
 from roro_yield.manifest import manifest_csv
-from roro_yield.models import Plan
+from roro_yield.models import Plan, Scenario
 from roro_yield.optimizer import solve_optimal
 from roro_yield.simulator import ScenarioParams, generate_scenario
 from server import jobs_api
@@ -102,20 +102,25 @@ def lab_smart(body: LabParams) -> dict:
     return {"job_id": jobs_api.submit(key, _smart, scenario, params, ADVISOR_K, output=output)}
 
 
-@router.post("/manifest.csv")
-def manifest(req: ManifestRequest) -> Response:
-    params = _engine_params(req.params)
+def resolve_lab_plan(params: ScenarioParams, plan_key: str) -> tuple[Scenario, Plan] | None:
+    """The finished plan for these Lab settings, or None if it has not been computed."""
     jobs = get_jobs()
     smart = jobs.result(("lab_smart", params, ADVISOR_K))
     plans = jobs.result(("lab", params))
     plan = None
-    if req.plan_key == "smart" and smart is not None:
+    if plan_key == "smart" and smart is not None:
         plan = smart[0]
-    elif req.plan_key == "optimal" and smart is not None:
+    elif plan_key == "optimal" and smart is not None:
         plan = smart[1]
-    elif plans is not None and req.plan_key != "smart":
-        plan = plans[0] if req.plan_key == "fcfs" else plans[1]
-    if plan is None:
+    elif plans is not None and plan_key != "smart":
+        plan = plans[0] if plan_key == "fcfs" else plans[1]
+    return None if plan is None else (generate_scenario(params), plan)
+
+
+@router.post("/manifest.csv")
+def manifest(req: ManifestRequest) -> Response:
+    found = resolve_lab_plan(_engine_params(req.params), req.plan_key)
+    if found is None:
         raise HTTPException(409, "Run this plan first, then download its manifest.")
-    return Response(manifest_csv(generate_scenario(params), plan), media_type="text/csv",
+    return Response(manifest_csv(*found), media_type="text/csv",
                     headers={"Content-Disposition": 'attachment; filename="manifest.csv"'})
