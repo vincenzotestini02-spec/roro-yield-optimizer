@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, ApiError, pollJob } from '../api'
 import { DeckView } from '../components/DeckView'
 import { JobProgress } from '../components/JobProgress'
+import { downloadBlob } from '../download'
 import { euro, pctAgainst } from '../format'
 import type { LabDefaults, LabPlans, LabSmart, LabValues, PlanResult } from '../types'
 
@@ -18,12 +19,16 @@ const FIELDS: { title: string; items: [string, string, number][] }[] = [
     ['max_dwt_t', 'Max cargo deadweight (t)', 10],
     ['reefer_plugs', 'Reefer plugs', 1],
     ['lashing_gap_m', 'Lashing gap between units (m)', 0.1],
+    ['broken_stowage_pct', 'Lost space (broken stowage)', 0.01],
   ] },
   { title: 'Stability', items: [
     ['max_heel_deg', 'Max heel (°)', 0.1],
     ['max_trim_m', 'Max trim (m)', 0.05],
     ['ballast_tank_cap_t', 'Ballast tank capacity (t per tank)', 10],
     ['ballast_cost_per_t', 'Ballast cost (€/t)', 0.5],
+    ['displacement_t', 'Displacement (t)', 500],
+    ['gm_m', 'Metacentric height GM (m)', 0.1],
+    ['mtc_tm_per_cm', 'Moment to change trim (t·m/cm)', 10],
   ] },
   { title: 'Sailing', items: [['seed', 'Random seed', 1]] },
 ]
@@ -74,6 +79,8 @@ export function LabPage() {
   const [computing, setComputing] = useState(false)
   const [smartProgress, setSmartProgress] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [preset, setPreset] = useState('demo')
+  const [confirmSlow, setConfirmSlow] = useState(false)
   const smartRun = useRef<{ id: string; abort: AbortController } | null>(null)
 
   const stopSmart = useCallback(() => {
@@ -107,7 +114,21 @@ export function LabPage() {
       .catch((e) => setError(message(e)))
   }, [compare])
 
+  function choosePreset(key: string) {
+    if (defaults === null) return
+    setPreset(key)
+    const next = { ...values, ...defaults.presets[key].values }
+    setValues(next)
+    void compare(next)
+  }
+
+  function askSmart() {
+    if (plans?.smart_may_be_slow && !confirmSlow) setConfirmSlow(true)
+    else void runSmart()
+  }
+
   async function runSmart() {
+    setConfirmSlow(false)
     const abort = new AbortController()
     setError(null)
     setSmartProgress(0)
@@ -127,17 +148,18 @@ export function LabPage() {
 
   const cancelSmart = stopSmart
 
-  async function download() {
+  async function download(format: 'pdf' | 'csv') {
     try {
-      const blob = await api.manifestCsv(ranValues, 'optimal')
-      const link = document.createElement('a')
-      link.href = URL.createObjectURL(blob)
-      link.download = 'manifest.csv'
-      link.click()
-      URL.revokeObjectURL(link.href)
+      const blob = await api.exportPlan({ source: 'lab', params: ranValues, plan_key: 'optimal' }, format)
+      downloadBlob(blob, `roro-plan-optimal.${format}`)
     } catch (e) {
       setError(message(e))
     }
+  }
+
+  function shownValue(name: string): string {
+    const v = values[name]
+    return name === 'broken_stowage_pct' ? `${Math.round(v * 100)}%` : String(v)
   }
 
   const best = smart?.best ?? plans?.optimal
@@ -152,6 +174,15 @@ export function LabPage() {
       </div>
       <div className="grid-2">
         <section className="card" aria-label="Lab settings">
+          {defaults && (
+            <label className="field">
+              <span>Vessel</span>
+              <select aria-label="Vessel" value={preset} onChange={(e) => choosePreset(e.target.value)}>
+                {Object.entries(defaults.presets).map(([key, p]) => <option key={key} value={key}>{p.label}</option>)}
+              </select>
+              <span className="small muted">{defaults.note}</span>
+            </label>
+          )}
           {defaults && FIELDS.map(({ title, items }) => {
             const present = items.filter(([name]) => name in defaults.limits)
             return present.length === 0 ? null : (
@@ -159,7 +190,7 @@ export function LabPage() {
                 <h3>{title}</h3>
                 {present.map(([name, label, step]) => (
                   <label className="field" key={name}>
-                    <span>{label}<strong>{values[name]}</strong></span>
+                    <span>{label}<strong>{shownValue(name)}</strong></span>
                     <input type="range" min={defaults.limits[name][0]} max={defaults.limits[name][1]} step={step}
                       value={values[name]} onChange={(e) => setValues({ ...values, [name]: Number(e.target.value) })} />
                   </label>
@@ -168,7 +199,7 @@ export function LabPage() {
             )
           })}
           <button className="primary" disabled={computing || defaults === null} onClick={() => void compare(values)}>Compare plans</button>
-          <p className="small muted">Hull constants are fixed. Only the end-tank arm follows the lane length.</p>
+          <p className="small muted">Other hull constants are fixed. The end-tank arm follows the lane length.</p>
         </section>
         <div className="stack">
           {error && <p className="notice">{error}</p>}
@@ -182,7 +213,13 @@ export function LabPage() {
               </div>
               {smartProgress !== null
                 ? <JobProgress label="The smart planner is playing this sailing" progress={smartProgress} onCancel={cancelSmart} />
-                : !smart && <div><button onClick={() => void runSmart()}>Run the smart planner (K = {defaults?.advisor_k} futures per request)</button></div>}
+                : !smart && <div><button onClick={askSmart}>Run the smart planner (K = {defaults?.advisor_k} futures per request)</button></div>}
+              {confirmSlow && (
+                <div className="notice stack">
+                  <p>On this ship the smart planner can take several minutes on the free server.</p>
+                  <div className="row"><button onClick={() => void runSmart()}>Run anyway</button><button onClick={() => setConfirmSlow(false)}>Not now</button></div>
+                </div>
+              )}
               <div className="card table-wrap">
                 <table>
                   <thead><tr><th>Measure</th>{shown.map((p) => <th key={p.method}>{p.method}</th>)}</tr></thead>
@@ -191,9 +228,16 @@ export function LabPage() {
                   </tbody>
                 </table>
               </div>
-              <div className="card"><h2>Best possible deck</h2><DeckView deck={best.deck} /></div>
+              <div className="card">
+                <h2>Best possible deck</h2>
+                <DeckView deck={best.deck} />
+                <p className="small muted">Usable {best.deck.usable_m.toFixed(0)} of {best.deck.capacity_m.toFixed(0)} lane-m after lost space.</p>
+              </div>
               <div className="card"><h2>Lane-metres sold</h2><Bars plans={shown} /></div>
-              <div><button onClick={() => void download()}>Download loading manifest (CSV)</button></div>
+              <div className="row">
+                <button onClick={() => void download('pdf')}>Download PDF</button>
+                <button onClick={() => void download('csv')}>Download CSV</button>
+              </div>
             </>
           )}
         </div>

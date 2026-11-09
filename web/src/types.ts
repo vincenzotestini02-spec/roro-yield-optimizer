@@ -44,6 +44,8 @@ export interface Deck {
   ballast: { port_t: number; stbd_t: number; fore_t: number; aft_t: number }
   ballast_total_t: number
   tank_cap_t: number
+  usable_m: number
+  broken_stowage_pct: number
 }
 
 export interface GameState {
@@ -124,11 +126,22 @@ export interface LabDefaults {
   values: LabValues
   limits: Record<string, [number, number]>
   advisor_k: number
+  presets: Record<string, { label: string; values: LabValues }>
+  note: string
 }
 
 export interface LabPlans {
   fcfs: PlanResult
   optimal: PlanResult
+  smart_may_be_slow: boolean
+}
+
+export interface ExportBody {
+  source: 'lab' | 'game'
+  params?: LabValues
+  seed?: number
+  decisions?: Decision[]
+  plan_key: 'fcfs' | 'optimal' | 'smart' | 'you' | 'best'
 }
 
 export interface LabSmart {

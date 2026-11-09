@@ -10,7 +10,7 @@ export const deck = (over: Partial<Deck> = {}): Deck => ({
   lanes: [{ id: 'L1', length_m: 120, y_m: -3 }, { id: 'L2', length_m: 120, y_m: 3 }],
   placements: [], remaining_m: {}, used_m: 0, capacity_m: 240, weight_t: 0, max_dwt_t: 1100, plugs_used: 0,
   reefer_plugs: 12, heel_deg: 0, trim_m: 0, max_heel_deg: 2, max_trim_m: 0.5,
-  ballast: { port_t: 0, stbd_t: 0, fore_t: 0, aft_t: 0 }, ballast_total_t: 0, tank_cap_t: 300, ...over,
+  ballast: { port_t: 0, stbd_t: 0, fore_t: 0, aft_t: 0 }, ballast_total_t: 0, tank_cap_t: 300, usable_m: 240, broken_stowage_pct: 0, ...over,
 })
 
 export const gameState = (over: Partial<GameState> = {}): GameState => ({

@@ -1,5 +1,5 @@
 import type {
-  Decision, DemandTable, GameState, LabDefaults, LabValues, RevealResult,
+  Decision, DemandTable, ExportBody, GameState, LabDefaults, LabValues, RevealResult,
 } from './types'
 
 const POLL_MS = 1000
@@ -57,13 +57,21 @@ export const api = {
   labSmart: (params: LabValues) => post<Job>('/api/lab/smart', params),
   demandTable: () => request<DemandTable>('/api/demand-table'),
   cancelJob: (id: string) => request<void>(`/api/jobs/${id}`, { method: 'DELETE' }),
-  manifestCsv: async (params: LabValues, planKey: string): Promise<Blob> => {
-    const response = await fetch('/api/manifest.csv', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ params, plan_key: planKey }),
-    })
-    if (!response.ok) throw new ApiError(response.status, 'Run this plan first, then download its manifest.')
+  exportPlan: async (body: ExportBody, format: 'pdf' | 'csv'): Promise<Blob> => {
+    let response: Response
+    try {
+      response = await fetch(`/api/export/${format}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+    } catch {
+      throw new ApiError(0, 'The server cannot be reached. Try again in a moment.')
+    }
+    if (!response.ok) {
+      const detail = await response.json().then((b) => detailText(b.detail)).catch(() => 'The download failed.')
+      throw new ApiError(response.status, detail)
+    }
     return response.blob()
   },
 }
