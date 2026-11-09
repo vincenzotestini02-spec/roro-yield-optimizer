@@ -109,7 +109,7 @@ def build_model(
     gap = vessel.lashing_gap_m
     cat = "Continuous" if relaxed else "Binary"
     remaining = deck.remaining_m if deck is not None else {
-        Slot(lane.id, z): lane.zone_length_m for lane in vessel.lanes for z in range(ZONES)
+        Slot(lane.id, z): vessel.zone_capacity_m(lane) for lane in vessel.lanes for z in range(ZONES)
     }
     base_weight = deck.weight_t if deck is not None else 0.0
     base_plugs = deck.plugs_used if deck is not None else 0
@@ -139,7 +139,7 @@ def build_model(
         length = b.effective_length(gap)
         mine = []
         for lane in vessel.lanes:
-            if length > lane.zone_length_m + 1e-9:
+            if length > vessel.zone_capacity_m(lane) + 1e-9:
                 continue
             for z in range(ZONES):
                 slot = Slot(lane.id, z)

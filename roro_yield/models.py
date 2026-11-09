@@ -126,6 +126,11 @@ class Vessel:
     reefer_plugs: int
     lashing_gap_m: float
     stability: Stability = DEFAULT_STABILITY
+    broken_stowage_pct: float = 0.0  # share of each zone lost to pillars, ramps and lashing points
+
+    def zone_capacity_m(self, lane: Lane) -> float:
+        """Usable length of one zone of `lane` after broken stowage."""
+        return lane.zone_length_m * (1.0 - self.broken_stowage_pct)
 
     @property
     def total_lane_m(self) -> float:

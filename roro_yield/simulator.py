@@ -43,6 +43,10 @@ class ScenarioParams:
     max_trim_m: float = 0.5
     ballast_tank_cap_t: float = 300.0
     ballast_cost_per_t: float = 5.0
+    broken_stowage_pct: float = 0.0
+    displacement_t: float = 8000.0
+    gm_m: float = 1.5
+    mtc_tm_per_cm: float = 100.0
     seed: int = 42
 
 
@@ -151,8 +155,12 @@ def generate_scenario(params: ScenarioParams) -> Scenario:
         max_dwt_t=params.max_dwt_t,
         reefer_plugs=params.reefer_plugs,
         lashing_gap_m=params.lashing_gap_m,
+        broken_stowage_pct=params.broken_stowage_pct,
         stability=replace(
             DEFAULT_STABILITY,
+            displacement_t=params.displacement_t,
+            gm_m=params.gm_m,
+            mtc_tm_per_cm=params.mtc_tm_per_cm,
             max_heel_deg=params.max_heel_deg,
             max_trim_m=params.max_trim_m,
             tank_cap_t=params.ballast_tank_cap_t,

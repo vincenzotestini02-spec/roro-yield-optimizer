@@ -24,7 +24,7 @@ class DeckState:
     def __init__(self, vessel: Vessel):
         self.vessel = vessel
         self.remaining_m: dict[Slot, float] = {
-            Slot(lane.id, z): lane.zone_length_m for lane in vessel.lanes for z in range(ZONES)
+            Slot(lane.id, z): vessel.zone_capacity_m(lane) for lane in vessel.lanes for z in range(ZONES)
         }
         self.loads: dict[str, tuple[Booking, Slot]] = {}
         self.weight_t: float = 0.0
@@ -110,7 +110,7 @@ class DeckState:
         """None if the booking can be loaded now, otherwise a short human reason."""
         vessel = self.vessel
         length = b.effective_length(vessel.lashing_gap_m)
-        if all(length > lane.zone_length_m + EPS for lane in vessel.lanes):
+        if all(length > vessel.zone_capacity_m(lane) + EPS for lane in vessel.lanes):
             return "doesn't fit any lane"
         space = self._space_slots(b)
         if not space:
@@ -171,7 +171,7 @@ def check_plan(scenario: Scenario, plan: Plan) -> list[str]:
             problems.append(f"{booking_id} is both placed and rejected")
 
     for slot, total in used.items():
-        cap = lanes[slot.lane_id].zone_length_m
+        cap = vessel.zone_capacity_m(lanes[slot.lane_id])
         if total > cap + EPS:
             problems.append(f"zone {slot} overfilled: {total:.1f} m > {cap:.1f} m")
     if plugs > vessel.reefer_plugs:
