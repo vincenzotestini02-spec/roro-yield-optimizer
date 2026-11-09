@@ -52,3 +52,21 @@ v3 runs as its own Docker Space. Nothing here touches the Streamlit apps.
 4. From the repository root, in Git Bash, run `scripts/deploy_hf.sh https://huggingface.co/spaces/YOUR-USERNAME/YOUR-SPACE`. Use your username and the token when Git asks for a password.
 5. Follow the build in the Space's **Logs** tab. When it ends, `/api/health` answers `{"status":"ok"}`.
 6. Time the live app: `.venv/Scripts/python.exe -m benchmarks.measure_live https://YOUR-USERNAME-YOUR-SPACE.hf.space --verdicts 10`.
+
+## v3 on Google Cloud Run (no local tools needed)
+
+Hugging Face now requires a paid plan for Docker Spaces, so v3 runs on Cloud Run. Cloud Run builds the image from GitHub with the repository's `Dockerfile`. It publishes the `v3-live` branch, which moves only when the owner decides to publish.
+
+1. Open <https://console.cloud.google.com>, create a project named `roro-yield-optimizer` and link a billing account. A card is needed even within the free tier.
+2. **Billing → Budgets & alerts → Create budget**: amount €1, alerts at 50% and 100%, email to you.
+3. **Cloud Run → Deploy container → Service**, then **Continuously deploy from a repository (source or function)** → **Set up with Cloud Build**. Connect GitHub, pick `roro-yield-optimizer`, branch `^v3-live$`, build type **Dockerfile**, source location `/Dockerfile`.
+4. Settings:
+   - Service name `roro-yield-optimizer`, region `europe-west1 (Belgium)`.
+   - Authentication: **Allow public access**.
+   - Billing: **Instance-based**. Calculations run between requests, so the CPU must stay on while an instance is up.
+   - Service scaling: minimum instances **0**, maximum instances **1**. Jobs live in the memory of one instance, so it must stay a single instance.
+   - Container port **7860**, memory **2 GiB**, CPU **1**, request timeout **300** s, **Startup CPU boost** on.
+5. Click **Create**. The first build takes a few minutes. When it ends, open the service URL and check `/api/health`.
+6. Time the live app: `.venv/Scripts/python.exe -m benchmarks.measure_live https://YOUR-SERVICE-URL --verdicts 10`.
+
+To publish a new version later: `git push origin v3:v3-live`.
