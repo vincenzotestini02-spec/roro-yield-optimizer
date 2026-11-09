@@ -195,3 +195,76 @@ test('a wrong session file is refused with a message', async () => {
   await userEvent.upload(screen.getByLabelText('Open session'), picked)
   await screen.findByText(/not a planner session/)
 })
+
+const plannerVerdict = {
+  booking_id: 'NEW1', accept: true, feasible: true, n_pays_off: 14, k: 20, expected_gain_eur: 420, reason: null,
+  text: 'Accept — pays off in 14 of 20 futures, expected gain +€420', assumption: 'Assumption: normal demand, 45% contract',
+}
+
+async function fillRequest(price = '95') {
+  await userEvent.clear(screen.getByLabelText('Booking id'))
+  await userEvent.type(screen.getByLabelText('Booking id'), 'NEW1')
+  await userEvent.type(screen.getByLabelText('Customer'), 'Spot haulier')
+  await userEvent.selectOptions(screen.getByLabelText('Unit type'), 'van')
+  if (price) await userEvent.type(screen.getByLabelText('Price per metre (€)'), price)
+}
+
+test('a request without a price cannot be sent', async () => {
+  await planned()
+  await fillRequest('')
+  expect(screen.getByRole('button', { name: 'Ask the advisor' })).toBeDisabled()
+})
+
+test('the assumption text is always visible', async () => {
+  await planned()
+  expect(screen.getByText('Assumption: normal demand, 45% contract')).toBeInTheDocument()
+  await userEvent.selectOptions(screen.getByLabelText('Demand level'), 'high')
+  expect(screen.getByText('Assumption: high demand, 45% contract')).toBeInTheDocument()
+})
+
+test('the advisor verdict shows with the assumption', async () => {
+  vi.mocked(api.plannerAdvise).mockResolvedValue({ job_id: 'a1' })
+  await planned()
+  await fillRequest()
+  vi.mocked(pollJob).mockResolvedValue(plannerVerdict)
+  await userEvent.click(screen.getByRole('button', { name: 'Ask the advisor' }))
+  await screen.findByText(/pays off in 14 of 20 futures/)
+  expect(api.plannerAdvise).toHaveBeenCalledWith(expect.anything(),
+    expect.objectContaining({ booking_id: 'NEW1', unit_type: 'van', length_m: 6.5, rate_per_m: 95 }), expect.objectContaining({ level: 'normal' }))
+})
+
+test('accepting replans and lists moved units', async () => {
+  vi.mocked(api.plannerAdvise).mockResolvedValue({ job_id: 'a1' })
+  await planned()
+  await fillRequest()
+  vi.mocked(pollJob).mockResolvedValue(plannerVerdict)
+  await userEvent.click(screen.getByRole('button', { name: 'Ask the advisor' }))
+  await screen.findByText(/pays off in 14 of 20 futures/)
+  vi.mocked(pollJob).mockResolvedValue(planResult({ moved: ['B1'] }))
+  await userEvent.click(screen.getByRole('button', { name: 'Accept request' }))
+  await waitFor(() => expect(api.plannerPlan).toHaveBeenLastCalledWith(expect.objectContaining({
+    bookings: expect.arrayContaining([expect.objectContaining({ booking_id: 'NEW1' })]),
+  })))
+  await screen.findByText(/Moved: B1/)
+})
+
+test('rejecting keeps the plan and logs the decision', async () => {
+  vi.mocked(api.plannerAdvise).mockResolvedValue({ job_id: 'a1' })
+  await planned()
+  const plansBefore = vi.mocked(api.plannerPlan).mock.calls.length
+  await fillRequest()
+  vi.mocked(pollJob).mockResolvedValue(plannerVerdict)
+  await userEvent.click(screen.getByRole('button', { name: 'Ask the advisor' }))
+  await screen.findByText(/pays off in 14 of 20 futures/)
+  await userEvent.click(screen.getByRole('button', { name: 'Reject request' }))
+  await screen.findByText(/NEW1: rejected/)
+  expect(vi.mocked(api.plannerPlan).mock.calls.length).toBe(plansBefore)
+})
+
+test('a duplicate booking id is refused with the reason', async () => {
+  vi.mocked(api.plannerAdvise).mockRejectedValue(new ApiError(422, 'B1 is already a booking.'))
+  await planned()
+  await fillRequest()
+  await userEvent.click(screen.getByRole('button', { name: 'Ask the advisor' }))
+  await screen.findByText('B1 is already a booking.')
+})

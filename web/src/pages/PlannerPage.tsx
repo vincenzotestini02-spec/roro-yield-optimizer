@@ -2,11 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, ApiError, pollJob } from '../api'
 import type { PlannerStateBody } from '../api'
 import { DeckView } from '../components/DeckView'
+import { RequestPanel } from '../components/RequestPanel'
 import { StabilityView } from '../components/StabilityView'
 import { downloadBlob } from '../download'
 import { euro } from '../format'
 import { loadPlanner, parseSessionFile, savePlanner } from '../planner'
-import type { Demand, LabDefaults, PlannerBookingIn, PlannerPlan, PlannerSession, PlannerVessel, RowError } from '../types'
+import type { Demand, LabDefaults, PlannerBookingIn, PlannerPlan, PlannerSession, PlannerVerdict, PlannerVessel, RowError } from '../types'
 
 const DEFAULT_DEMAND: Demand = { level: 'normal', contract_share: 0.45, spot_rate_multiplier: 1, window_days: 14, hours_to_departure: 72 }
 const PLANNER_LOST_SPACE = 0.15
@@ -44,6 +45,8 @@ export function PlannerPage() {
   const [busy, setBusy] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [moved, setMoved] = useState<string[]>([])
+  const [verdict, setVerdict] = useState<PlannerVerdict | null>(null)
+  const [asking, setAsking] = useState(false)
   const latest = useRef(0)
 
   const store = useCallback((next: PlannerSession) => {
@@ -103,6 +106,35 @@ export function PlannerPage() {
   function changeLostSpace(value: number) {
     if (session === null) return
     void replan({ ...session, vessel: { ...session.vessel, broken_stowage_pct: value } })
+  }
+
+  function changeDemand(demand: Demand) {
+    if (session === null) return
+    store({ ...session, demand })
+  }
+
+  async function ask(request: PlannerBookingIn) {
+    if (session === null) return
+    setAsking(true)
+    setError(null)
+    setVerdict(null)
+    try {
+      const { job_id } = await api.plannerAdvise(stateOf(session), request, session.demand)
+      setVerdict(await pollJob<PlannerVerdict>(job_id, () => {}))
+    } catch (e) {
+      setError(message(e))
+    } finally {
+      setAsking(false)
+    }
+  }
+
+  function decide(request: PlannerBookingIn, accept: boolean) {
+    if (session === null) return
+    const entry = { booking_id: request.booking_id, decision: accept ? 'accepted' as const : 'rejected' as const, verdict: verdict?.text ?? null }
+    setVerdict(null)
+    const log = [...session.log, entry]
+    if (accept) void replan({ ...session, bookings: [...session.bookings, request], log })
+    else store({ ...session, log })
   }
 
   function toggleOnBoard(id: string) {
@@ -257,6 +289,16 @@ export function PlannerPage() {
                   </table>
                 </div>
               </section>
+              {session && (
+                <RequestPanel demand={session.demand} onDemand={changeDemand} verdict={verdict} asking={asking}
+                  onAsk={(r) => void ask(r)} onDecide={decide} />
+              )}
+              {session && session.log.length > 0 && (
+                <section className="card">
+                  <h2>Decisions</h2>
+                  <ul>{session.log.map((e, i) => <li key={i}>{e.booking_id}: {e.decision}{e.verdict ? ` (advisor: ${e.verdict})` : ''}</li>)}</ul>
+                </section>
+              )}
               {plan.excluded.length > 0 && (
                 <section className="card">
                   <h2>Excluded</h2>

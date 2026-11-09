@@ -130,3 +130,6 @@ label.field input[type=range] { width: 100%; accent-color: var(--accent); }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 label.field select { font: inherit; min-height: 44px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--text); }
+.grid-2-tight { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 480px) { .grid-2-tight { grid-template-columns: minmax(0, 1fr); } }
+label.field input:not([type=range]):not([type=checkbox]):not([type=file]) { font: inherit; min-height: 40px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--text); }
