@@ -185,7 +185,24 @@ def build_model(
     return StowageModel(prob, y, shortfall, bal, forced_var)
 
 
-def solve_optimal(scenario: Scenario, time_limit_s: float = 3, candidates: Sequence[Plan] = ()) -> Plan:
+def _greedy_on(deck: DeckState, scenario: Scenario) -> Plan:
+    """FCFS on top of a deck whose units stay put: the starting plan when some units are fixed."""
+    trial = deck.copy()
+    rejected = []
+    for b in sorted(scenario.bookings, key=lambda b: b.arrival):
+        if trial.why_not(b) is None:
+            trial.place(b)
+        else:
+            rejected.append(b.id)
+    fixed = set(deck.loads)
+    return Plan("Greedy", {k: v for k, v in trial.placements.items() if k not in fixed}, rejected)
+
+
+def solve_optimal(scenario: Scenario, time_limit_s: float = 3, candidates: Sequence[Plan] = (),
+                  deck: DeckState | None = None) -> Plan:
+    """Best plan by the common objective. With `deck`, its units are fixed and part of the result."""
+    if deck is not None:
+        return _solve_on_deck(scenario, time_limit_s, candidates, deck)
     vessel = scenario.vessel
 
     seeds = [solve_fcfs(scenario), *candidates]
@@ -219,3 +236,30 @@ def solve_optimal(scenario: Scenario, time_limit_s: float = 3, candidates: Seque
 
     best = _best_of(scenario, [milp, *seeds])
     return _sorted_plan(scenario, best.placements)
+
+
+def _solve_on_deck(scenario: Scenario, time_limit_s: float, candidates: Sequence[Plan], deck: DeckState) -> Plan:
+    fixed = dict(deck.placements)
+    full = Scenario(scenario.vessel, tuple(b for b, _ in deck.loads.values()) + tuple(scenario.bookings),
+                    scenario.contract_commitment_m, scenario.shortfall_penalty_per_m)
+    free_ids = {b.id for b in scenario.bookings}
+
+    def with_fixed(placements: dict[str, Slot]) -> Plan:
+        merged = {**fixed, **{k: v for k, v in placements.items() if k in free_ids}}
+        return Plan(OPTIMAL_LABEL, merged, [b.id for b in full.bookings if b.id not in merged])
+
+    seeds = [with_fixed(_greedy_on(deck, scenario).placements), *(with_fixed(c.placements) for c in candidates)]
+    incumbent = _best_of(full, seeds)
+
+    model = build_model(scenario.vessel, scenario.bookings, scenario.contract_floor_m,
+                        scenario.shortfall_penalty_per_m, deck=deck)
+    prob, y = model.prob, model.y
+    start = {v.name: 0.0 for v in prob.variables()}
+    for bid, slot in incumbent.placements.items():
+        name = f"y_{bid}_{slot.lane_id}_{slot.zone}"
+        if bid in free_ids and name in start:
+            start[name] = 1.0
+    prob.solve(_WarmHiGHS(msg=False, timeLimit=time_limit_s, gapRel=0.005, start=start))
+    placements = {bid: Slot(lane_id, z) for (bid, lane_id, z), var in y.items() if (var.value() or 0) > 0.5}
+    best = _best_of(full, [with_fixed(placements), *seeds])
+    return _sorted_plan(full, best.placements)
