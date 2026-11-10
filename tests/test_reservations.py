@@ -71,3 +71,17 @@ def test_removing_a_unit_gives_the_quota_back():
 def test_copy_keeps_reservations():
     deck = DeckState(VESSEL, [Reservation("Nordfreight", 65.0)])
     assert deck.copy().why_not(van("O1", "Other")) == "space is reserved for Nordfreight"
+
+
+def test_an_over_committed_deck_never_crashes_and_the_customer_keeps_its_quota():
+    # Units on board first, then a reservation bigger than the space they leave (allowed: on board wins).
+    deck = DeckState(VESSEL)
+    deck.place(van("O1", "Other"))
+    deck.place(van("O2", "Other"))
+    deck = deck.with_reservations([Reservation("N", 60.0)])
+    assert deck.why_not(van("N1", "N")) is None          # filling its own quota commits nothing new
+    assert deck.why_not(van("O3", "Other")) == "space is reserved for N"
+    for i in range(1, 7):
+        deck.place(van(f"N{i}", "N"))
+    reason = deck.why_not(van("N9", "N"))                # beyond the quota on a full deck: a reason, no crash
+    assert isinstance(reason, str) and reason

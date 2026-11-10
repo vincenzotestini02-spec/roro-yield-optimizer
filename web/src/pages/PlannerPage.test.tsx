@@ -364,3 +364,19 @@ test('a session saved before reservations opens with none', async () => {
   await waitFor(() => expect(api.plannerPlan).toHaveBeenCalledWith(expect.objectContaining({ reservations: [] })))
   expect(await screen.findByText('No space reserved.')).toBeInTheDocument()
 })
+
+test('a reservation whose plan is overtaken by a newer one is kept', async () => {
+  await planned()
+  let finishFirst: (value: PlannerPlan) => void = () => {}
+  vi.mocked(pollJob).mockImplementationOnce(() => new Promise((resolve) => { finishFirst = resolve as typeof finishFirst }))
+  await userEvent.type(screen.getByLabelText('Reservation holder'), 'Nordfreight')
+  await userEvent.type(screen.getByLabelText('Reservation metres'), '50')
+  await userEvent.click(screen.getByRole('button', { name: 'Reserve' }))
+  vi.mocked(pollJob).mockResolvedValue(planResult({ reservations: [{ customer: 'Nordfreight', metres: 50, used: 0, left: 50 }] }))
+  await userEvent.selectOptions(screen.getByLabelText('Vessel'), 'shortsea')
+  await waitFor(() => expect(api.plannerPlan).toHaveBeenLastCalledWith(expect.objectContaining({
+    vessel: expect.objectContaining({ preset: 'shortsea' }), reservations: [{ customer: 'Nordfreight', metres: 50 }] })))
+  finishFirst(planResult())
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Release Nordfreight' })).toBeInTheDocument())
+  expect(screen.getByLabelText('Vessel')).toHaveValue('shortsea')
+})

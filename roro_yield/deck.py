@@ -97,11 +97,16 @@ class DeckState:
         key = customer_key(b.customer)
         length = b.effective_length(self.vessel.lashing_gap_m)
         own_after = max(0.0, self._left(key) - length) if key in self._quota else 0.0
-        return self.used_m + length + self.reserved_left(b.customer) + own_after <= self.capacity_m + EPS
+        # Units on board can already leave less room than the reservations hold; a unit that fills
+        # its own customer's quota commits no new space, so it is still allowed then.
+        committed = self.used_m + self.reserved_left()
+        return self.used_m + length + self.reserved_left(b.customer) + own_after <= max(self.capacity_m, committed) + EPS
 
     def _reserved_for(self, b: Booking) -> str:
         key = customer_key(b.customer)
-        others = [r for r in self.reservations if customer_key(r.customer) != key]
+        others = [r for r in self.reservations if customer_key(r.customer) != key and self._left(customer_key(r.customer)) > 0]
+        if not others:
+            return "other reservations"
         return max(others, key=lambda r: self._left(customer_key(r.customer))).customer.strip()
 
     def with_reservations(self, reservations: Sequence[Reservation]) -> "DeckState":

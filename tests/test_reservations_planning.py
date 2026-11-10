@@ -86,3 +86,13 @@ def test_on_board_units_plus_reservations_beyond_the_deck_load_nothing_else():
                            reservations=[Reservation("Nobody yet", capacity - aboard + 30)], time_limit_s=5)
     assert set(result.plan.placements) == set(on_board)
     assert all("reserved for Nobody yet" in reason for _, reason in result.excluded)
+
+
+def test_a_small_reservation_never_trades_loaded_metres():
+    vessel = Vessel("V", "A → B", (Lane("L1", 72.0, 0.0),), 5000.0, 10, 0.0, DEFAULT_STABILITY)
+    trailers = [Booking(f"T{i}", 0, "contract", "N", "semi_trailer", 16.5, 10.0, False, 50.0, 0.0, 0.0) for i in range(4)]
+    vans = [Booking(f"V{i}", 0, "contract", "Other", "van", 8.5, 3.0, False, 50.0, 0.0, 0.0) for i in range(8)]
+    bookings = trailers + vans
+    without = plan_accepted(vessel, bookings, time_limit_s=5)
+    held = plan_accepted(vessel, bookings, reservations=[Reservation("N", 1.0)], time_limit_s=5)
+    assert used(vessel, bookings, held.plan.placements) >= used(vessel, bookings, without.plan.placements) - 1e-6

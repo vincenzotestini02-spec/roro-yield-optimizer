@@ -61,9 +61,10 @@ export function PlannerPage() {
     savePlanner(next)
   }, [])
 
-  const replan = useCallback(async (next: PlannerSession): Promise<boolean> => {
+  // 'superseded': a newer plan was asked for meanwhile, so this one must not change the page.
+  const replan = useCallback(async (next: PlannerSession): Promise<'done' | 'refused' | 'superseded'> => {
     store(next)
-    if (next.bookings.length === 0) { setPlan(null); return true }
+    if (next.bookings.length === 0) { setPlan(null); return 'done' }
     const request = ++latest.current  // only the newest plan may change the page
     if (runningJob.current !== null) void api.cancelJob?.(runningJob.current)?.catch(() => {})
     runningJob.current = null
@@ -73,14 +74,15 @@ export function PlannerPage() {
       const { job_id } = await api.plannerPlan(stateOf(next))
       if (request === latest.current) runningJob.current = job_id
       const result = await pollJob<PlannerPlan>(job_id, () => {})
-      if (request !== latest.current) return false
+      if (request !== latest.current) return 'superseded'
       setPlan(result)
       setMoved(result.moved)
       store({ ...next, placements: result.placements })
-      return true
+      return 'done'
     } catch (e) {
-      if (request === latest.current) setError(message(e))
-      return false
+      if (request !== latest.current) return 'superseded'
+      setError(message(e))
+      return 'refused'
     } finally {
       if (request === latest.current) setBusy(false)
     }
@@ -170,10 +172,12 @@ export function PlannerPage() {
     if (customer === '' || !(metres > 0)) return
     const kept = (session.reservations ?? []).filter((r) => !sameCustomer(r.customer, customer))
     // A refused reservation (more than the deck, say) is not kept: the session stays plannable.
-    if (await replan({ ...session, reservations: [...kept, { customer, metres }] })) {
+    const outcome = await replan({ ...session, reservations: [...kept, { customer, metres }] })
+    if (outcome === 'refused') store(session)
+    else {
       setReserveCustomer('')
       setReserveMetres('')
-    } else store(session)
+    }
   }
 
   function release(customer: string) {

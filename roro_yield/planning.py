@@ -11,16 +11,13 @@ from dataclasses import dataclass, replace
 from typing import Sequence
 
 from .deck import DeckState
-from .models import Booking, Plan, Reservation, Scenario, Slot, Vessel, customer_key
+from .models import Booking, Plan, Reservation, Scenario, Slot, Vessel
 from .optimizer import solve_optimal
 
 METRE_WEIGHT = 1000.0
 # Staying put is worth less than half a metre of cargo, so the planner never trades loaded
 # metres for fewer moves, but between equally full plans it keeps units where they were.
 KEEP_BONUS = 400.0
-# Bookings of a customer with a reservation fill that reservation first: worth a little more per
-# metre, still far less than a metre of cargo, so no loaded metre is ever traded for it.
-RESERVED_BONUS_PER_M = 50.0
 PLANNER_LABEL = "Planner"
 NO_ROOM = "no zone can take it with the units already planned"
 
@@ -108,9 +105,8 @@ def plan_accepted(vessel: Vessel, bookings: Sequence[Booking], previous: dict[st
     if kept is not None:
         placements = kept.placements
     else:
-        reserved = {customer_key(r.customer) for r in reservations}
-        weighted = tuple(replace(b, rate_per_m=METRE_WEIGHT + (RESERVED_BONUS_PER_M if customer_key(b.customer) in reserved else 0.0),
-                                 reefer_fee=0.0, handling_cost=0.0) for b in others)
+        # No bonus for reserved customers: a unit filling its quota already frees common metres in the model.
+        weighted = tuple(replace(b, rate_per_m=METRE_WEIGHT, reefer_fee=0.0, handling_cost=0.0) for b in others)
         scenario = Scenario(vessel, weighted, 0.0, 0.0)
         start = {k: v for k, v in previous.items() if k not in on_board}
         candidates = (Plan("Previous", start, []),) if start else ()
