@@ -11,7 +11,7 @@ MAX_DECISIONS = 200
 
 class Decision(BaseModel):
     booking_id: str = Field(max_length=32)
-    action: Literal["accept", "reject"]
+    action: Literal["accept", "reject", "move"]
     slot: str | None = Field(default=None, max_length=32)
 
 

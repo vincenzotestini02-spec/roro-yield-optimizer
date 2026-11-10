@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException
 
 from roro_yield.advisor import advise
 from roro_yield.game import GameSession
+from roro_yield.kpis import MOVE_COST_EUR
 from roro_yield.simulator import ScenarioParams, expected_contract_m, generate_scenario
 from server import jobs_api
 from server.config import ADVISOR_K, GAME_PARAMS
@@ -34,6 +35,17 @@ def replay(seed: int, decisions: list[Decision]) -> GameSession:
     for d in decisions:
         if session.is_finished:
             raise InvalidDecision("The game is finished: no more decisions.")
+        if d.action == "move":
+            if d.slot is None:
+                raise InvalidDecision("A move needs the zone to move the unit to.")
+            try:
+                target = parse_slot(d.slot)
+            except ValueError:
+                raise InvalidDecision(f"{d.slot} is not a deck zone.") from None
+            reason = session.move(d.booking_id, target)
+            if reason is not None:
+                raise InvalidDecision(f"{d.booking_id} cannot move: {reason}.")
+            continue
         if d.booking_id != session.current.id:
             raise InvalidDecision(f"{d.booking_id} is not the current request.")
         if d.action == "reject":
@@ -75,6 +87,8 @@ def state_out(seed: int, session: GameSession) -> dict:
         "best_slot": None if best is None else str(best),
         "cannot_load_reason": None if current is None else session.deck.why_not(current),
         "floor_at_risk": session.contract_floor_at_risk(),
+        "moves": session.moves,
+        "move_cost_eur": MOVE_COST_EUR * session.moves,
         "contract_floor_m": session.scenario.contract_floor_m,
         "shortfall_penalty_per_m": session.scenario.shortfall_penalty_per_m,
     }

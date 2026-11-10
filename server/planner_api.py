@@ -205,7 +205,8 @@ def planner_move(req: MoveRequest) -> dict:
 
 
 def _advise(view: PolicyView, assumption: str) -> dict:
-    return {**verdict_out(advise(view, k=ADVISOR_K)), "assumption": assumption}
+    # In the planner units move for free on paper when it re-plans, so no move is suggested here.
+    return {**verdict_out(advise(view, k=ADVISOR_K, suggest_moves=False)), "assumption": assumption}
 
 
 @router.post("/advise")

@@ -83,6 +83,8 @@ def reveal(req: GameRequest) -> dict:
         "you": plan_result(scenario, session.to_plan()),
         "fcfs": plan_result(scenario, solve_fcfs(scenario)),
         "smart_job": smart_job,
+        "notes": ["The smart planner knew how many requests the sailing would get.",
+                  "Each unit you moved after loading cost €80 in handling."],
     }
 
 
