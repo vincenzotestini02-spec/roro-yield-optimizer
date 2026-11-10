@@ -104,6 +104,13 @@ class DeckState:
         others = [r for r in self.reservations if customer_key(r.customer) != key]
         return max(others, key=lambda r: self._left(customer_key(r.customer))).customer.strip()
 
+    def with_reservations(self, reservations: Sequence[Reservation]) -> "DeckState":
+        """A copy of this deck that also holds `reservations` (units already on it stay)."""
+        other = self.copy()
+        other.reservations = tuple(reservations)
+        other._quota = {customer_key(r.customer): r.metres for r in other.reservations}
+        return other
+
     def reservation_status(self) -> list[dict]:
         out = []
         for r in self.reservations:

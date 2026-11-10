@@ -80,6 +80,8 @@ def resolve_planner_plan(state: PlannerState) -> tuple[Scenario, Plan, list[str]
                    f"Lost space (broken stowage): {state.vessel.broken_stowage_pct:.0%}."]
     if plan.rejected:
         assumptions.append(f"{len(plan.rejected)} accepted bookings are not on the deck and need a decision.")
+    for r in state.reservations:
+        assumptions.append(f"Reserved for {r.customer.strip()}: {r.metres:.0f} m.")
     return Scenario(vessel, tuple(bookings), 0.0, 0.0), plan, assumptions
 
 

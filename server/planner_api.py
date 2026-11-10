@@ -17,7 +17,7 @@ from roro_yield.advisor import NEUTRAL_SEED, PolicyView, advise, advisor_rng_see
 from roro_yield.deck import DeckState
 from roro_yield.demand import expected_remaining, requests_for_level
 from roro_yield.kpis import evaluate
-from roro_yield.models import Booking, Plan, Scenario, Slot, Vessel
+from roro_yield.models import Booking, Plan, Reservation, Scenario, Slot, Vessel, customer_key
 from roro_yield.planning import OnBoardConflict, place_all, plan_accepted
 from roro_yield.simulator import HANDLING_PER_TONNE, HANDLING_PER_UNIT, REEFER_FEE, ScenarioParams, generate_scenario
 from server import jobs_api
@@ -47,10 +47,16 @@ PlannerVessel = create_model(
 )
 
 
+class ReservationIn(BaseModel):
+    customer: str = Field(min_length=1, max_length=80)
+    metres: float = Field(gt=0, le=100_000)
+
+
 class PlannerState(BaseModel):
     vessel: PlannerVessel = Field(default_factory=PlannerVessel)
     bookings: list[PlannerBooking] = Field(max_length=MAX_BOOKINGS)
     placements: dict[str, str] = Field(default_factory=dict)
+    reservations: list[ReservationIn] = Field(default_factory=list, max_length=50)
 
 
 class MoveRequest(PlannerState):
@@ -113,19 +119,38 @@ def _scenario(state: PlannerState) -> tuple[Vessel, list[Booking]]:
     return vessel_from(state.vessel), [engine_booking(b, i) for i, b in enumerate(state.bookings)]
 
 
-def deck_for(vessel: Vessel, by_id: dict[str, Booking], placements: dict[str, Slot]) -> DeckState:
-    """The deck holding `placements`; 409 if they do not fit this vessel (settings changed since)."""
+def reservations_of(state: PlannerState, vessel: Vessel) -> list[Reservation]:
+    """The state's reservations, checked: one per customer, and no more than the usable deck."""
+    seen: set[str] = set()
+    for r in state.reservations:
+        key = customer_key(r.customer)
+        if key in seen:
+            raise HTTPException(422, f"{r.customer.strip()} is reserved twice.")
+        seen.add(key)
+    total = sum(r.metres for r in state.reservations)
+    usable = DeckState(vessel).capacity_m
+    if total > usable + 1e-9:
+        raise HTTPException(422, f"Reserved space ({total:.0f} m) is more than the usable deck ({usable:.0f} m).")
+    return [Reservation(r.customer.strip(), r.metres) for r in state.reservations]
+
+
+def deck_for(vessel: Vessel, by_id: dict[str, Booking], placements: dict[str, Slot],
+             reservations: list[Reservation] | None = None) -> DeckState:
+    """The deck holding `placements`; 409 if they do not fit this vessel (settings changed since).
+
+    Reservations are added after the units, which are already planned or on board.
+    """
     deck = DeckState(vessel)
     if place_all(deck, [(by_id[k], slot) for k, slot in placements.items()]):
         raise HTTPException(409, STALE_PLAN)
-    return deck
+    return deck.with_reservations(reservations or [])
 
 
 def plan_out(state: PlannerState, vessel: Vessel, bookings: list[Booking], placements: dict[str, Slot],
              moved: list[str], excluded: list[tuple[str, str]] | None = None,
              warnings: list[str] | None = None) -> dict:
     by_id = {b.id: b for b in bookings}
-    deck = deck_for(vessel, by_id, placements)
+    deck = deck_for(vessel, by_id, placements, reservations_of(state, vessel))
     if excluded is None:
         missing = sorted((b for b in bookings if b.id not in placements), key=lambda b: (-b.length_m, b.id))
         excluded = [(b.id, deck.why_not(b) or "no zone can take it with the units already planned") for b in missing]
@@ -139,6 +164,7 @@ def plan_out(state: PlannerState, vessel: Vessel, bookings: list[Booking], place
         "kpis": kpis_out(evaluate(Scenario(vessel, tuple(bookings), 0.0, 0.0), plan)),
         "revenue_known": all(priced[k] for k in placements),
         "warnings": warnings or [],
+        "reservations": deck.reservation_status(),
     }
 
 
@@ -156,7 +182,8 @@ def _run_plan(state: PlannerState) -> dict:
     previous = _placements(state)
     on_board, warnings = _on_board(state, previous)
     try:
-        result = plan_accepted(vessel, bookings, previous=previous, on_board=on_board)
+        result = plan_accepted(vessel, bookings, previous=previous, on_board=on_board,
+                               reservations=reservations_of(state, vessel))
     except OnBoardConflict as exc:
         raise HTTPException(422, f"{exc.booking_id} is on board, but {exc.reason}.") from None
     return plan_out(state, vessel, bookings, result.plan.placements, result.moved, result.excluded, warnings)
@@ -169,6 +196,7 @@ def _state_key(state: BaseModel) -> str:
 @router.post("/plan")
 def planner_plan(state: PlannerState) -> dict:
     vessel, bookings = _scenario(state)
+    reservations_of(state, vessel)  # 422 now rather than as a failed job
     previous = _placements(state)
     on_board, _ = _on_board(state, previous)
     # On-board conflicts are cheap to find: answer them now rather than as a failed job.
@@ -194,7 +222,7 @@ def planner_move(req: MoveRequest) -> dict:
     except ValueError:
         raise HTTPException(422, f"{req.slot} is not a deck zone.") from None
     placements = {k: v for k, v in _placements(req).items() if k != req.booking_id}
-    deck = deck_for(vessel, by_id, placements)
+    deck = deck_for(vessel, by_id, placements, reservations_of(req, vessel))
     unit = by_id[req.booking_id]
     if slot not in deck.remaining_m:
         raise HTTPException(422, f"{req.slot} is not a zone of this vessel.")
@@ -217,7 +245,7 @@ def planner_advise(req: AdviseRequest) -> dict:
     if req.request.booking_id in {b.id for b in bookings}:
         raise HTTPException(422, f"{req.request.booking_id} is already a booking.")
     by_id = {b.id: b for b in bookings}
-    deck = deck_for(vessel, by_id, _placements(req))
+    deck = deck_for(vessel, by_id, _placements(req), reservations_of(req, vessel))
     d = req.demand
     frac = min(max(1 - d.hours_to_departure / (d.window_days * 24), 0.0), 1.0)
     usable = sum(vessel.zone_capacity_m(lane) * 4 for lane in vessel.lanes)

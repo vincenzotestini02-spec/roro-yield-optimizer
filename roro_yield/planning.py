@@ -70,7 +70,7 @@ def place_all(deck: DeckState, items: Sequence[tuple[Booking, Slot]]) -> list[tu
 
 def _fixed_deck(vessel: Vessel, by_id: dict[str, Booking], previous: dict[str, Slot],
                 on_board: frozenset[str], reservations: Sequence[Reservation] = ()) -> DeckState:
-    deck = DeckState(vessel, reservations)
+    deck = DeckState(vessel)  # units on board are physically there: no reservation can push them out
     for booking_id in sorted(on_board):
         if booking_id not in previous:
             raise OnBoardConflict(booking_id, "it has no zone in the plan yet")
@@ -78,7 +78,7 @@ def _fixed_deck(vessel: Vessel, by_id: dict[str, Booking], previous: dict[str, S
     if failed:
         b, _, reason = failed[0]
         raise OnBoardConflict(b.id, reason)
-    return deck
+    return deck.with_reservations(reservations)
 
 
 def _keep_previous(deck: DeckState, others: Sequence[Booking], previous: dict[str, Slot]) -> DeckState | None:
