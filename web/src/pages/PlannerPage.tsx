@@ -31,8 +31,11 @@ export function emptySession(vessel: PlannerVessel): PlannerSession {
 }
 
 export function stateOf(session: PlannerSession): PlannerStateBody {
-  return { vessel: session.vessel, bookings: session.bookings, placements: session.placements }
+  return { vessel: session.vessel, bookings: session.bookings, placements: session.placements,
+    reservations: session.reservations ?? [] }
 }
+
+const sameCustomer = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
 
 export function PlannerPage() {
   const [loaded] = useState(() => loadPlanner())
@@ -47,6 +50,8 @@ export function PlannerPage() {
   const [moved, setMoved] = useState<string[]>([])
   const [verdict, setVerdict] = useState<PlannerVerdict | null>(null)
   const [asking, setAsking] = useState(false)
+  const [reserveCustomer, setReserveCustomer] = useState('')
+  const [reserveMetres, setReserveMetres] = useState('')
   const latest = useRef(0)
   const runningJob = useRef<string | null>(null)
   const lostSpaceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -56,9 +61,9 @@ export function PlannerPage() {
     savePlanner(next)
   }, [])
 
-  const replan = useCallback(async (next: PlannerSession) => {
+  const replan = useCallback(async (next: PlannerSession): Promise<boolean> => {
     store(next)
-    if (next.bookings.length === 0) { setPlan(null); return }
+    if (next.bookings.length === 0) { setPlan(null); return true }
     const request = ++latest.current  // only the newest plan may change the page
     if (runningJob.current !== null) void api.cancelJob?.(runningJob.current)?.catch(() => {})
     runningJob.current = null
@@ -68,12 +73,14 @@ export function PlannerPage() {
       const { job_id } = await api.plannerPlan(stateOf(next))
       if (request === latest.current) runningJob.current = job_id
       const result = await pollJob<PlannerPlan>(job_id, () => {})
-      if (request !== latest.current) return
+      if (request !== latest.current) return false
       setPlan(result)
       setMoved(result.moved)
       store({ ...next, placements: result.placements })
+      return true
     } catch (e) {
       if (request === latest.current) setError(message(e))
+      return false
     } finally {
       if (request === latest.current) setBusy(false)
     }
@@ -154,6 +161,24 @@ export function PlannerPage() {
     const log = [...session.log, entry]
     if (accept) void replan({ ...session, bookings: [...session.bookings, request], log })
     else store({ ...session, log })
+  }
+
+  async function reserve() {
+    if (!session) return
+    const customer = reserveCustomer.trim()
+    const metres = Number(reserveMetres)
+    if (customer === '' || !(metres > 0)) return
+    const kept = (session.reservations ?? []).filter((r) => !sameCustomer(r.customer, customer))
+    // A refused reservation (more than the deck, say) is not kept: the session stays plannable.
+    if (await replan({ ...session, reservations: [...kept, { customer, metres }] })) {
+      setReserveCustomer('')
+      setReserveMetres('')
+    } else store(session)
+  }
+
+  function release(customer: string) {
+    if (!session) return
+    void replan({ ...session, reservations: (session.reservations ?? []).filter((r) => !sameCustomer(r.customer, customer)) })
   }
 
   function toggleOnBoard(id: string) {
@@ -311,6 +336,39 @@ export function PlannerPage() {
                 </section>
               )}
             </>
+          )}
+          {session && session.bookings.length > 0 && (
+            <section className="card" aria-label="Reserved space">
+              <h2>Reserved space</h2>
+              <p className="small muted">Metres held for one customer on the whole ship. Other customers cannot use them until you release them.</p>
+              {(session.reservations ?? []).length === 0 ? <p className="small">No space reserved.</p> : (
+                <div className="table-wrap">
+                  <table>
+                    <thead><tr><th>Customer</th><th className="num">Reserved</th><th className="num">Used</th><th className="num">Left</th><th></th></tr></thead>
+                    <tbody>
+                      {(session.reservations ?? []).map((r) => {
+                        const status = plan?.reservations?.find((s) => sameCustomer(s.customer, r.customer))
+                        return (
+                          <tr key={r.customer}>
+                            <td>{r.customer}</td><td className="num">{r.metres} m</td>
+                            <td className="num">{status ? `${status.used.toFixed(1)} m` : '–'}</td>
+                            <td className="num">{status ? `${status.left.toFixed(1)} m` : '–'}</td>
+                            <td><button aria-label={`Release ${r.customer}`} disabled={busy} onClick={() => release(r.customer)}>Release</button></td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <div className="row">
+                <input aria-label="Reserved customer" placeholder="Customer" value={reserveCustomer} maxLength={80}
+                  onChange={(e) => setReserveCustomer(e.target.value)} />
+                <input aria-label="Reserved metres" placeholder="Metres" type="number" min={1} value={reserveMetres}
+                  onChange={(e) => setReserveMetres(e.target.value)} />
+                <button disabled={busy || reserveCustomer.trim() === '' || !(Number(reserveMetres) > 0)} onClick={() => void reserve()}>Reserve</button>
+              </div>
+            </section>
           )}
           {session && session.bookings.length > 0 && (
             <section className="card">

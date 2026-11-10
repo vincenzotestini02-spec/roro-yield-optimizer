@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, expect, test, vi } from 'vitest'
@@ -317,4 +317,50 @@ test('the planner verdict shows the decision label and the range', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Ask the advisor' }))
   await screen.findByText('Your call')
   expect(screen.getByText(/range −€200 to \+€300/)).toBeInTheDocument()
+})
+
+test('a reservation is sent with the plan and its use is shown', async () => {
+  await planned()
+  vi.mocked(pollJob).mockResolvedValue(planResult({ reservations: [{ customer: 'Nordfreight', metres: 50, used: 14.6, left: 35.4 }] }))
+  await userEvent.type(screen.getByLabelText('Reserved customer'), 'Nordfreight')
+  await userEvent.type(screen.getByLabelText('Reserved metres'), '50')
+  await userEvent.click(screen.getByRole('button', { name: 'Reserve' }))
+  await waitFor(() => expect(api.plannerPlan).toHaveBeenLastCalledWith(
+    expect.objectContaining({ reservations: [{ customer: 'Nordfreight', metres: 50 }] })))
+  const row = await within(screen.getByRole('region', { name: 'Reserved space' })).findByRole('row', { name: /Nordfreight/ })
+  expect(row).toHaveTextContent('50')
+  expect(row).toHaveTextContent('14.6')
+  expect(row).toHaveTextContent('35.4')
+})
+
+test('releasing a reservation replans without it', async () => {
+  await planned()
+  vi.mocked(pollJob).mockResolvedValue(planResult({ reservations: [{ customer: 'Nordfreight', metres: 50, used: 0, left: 50 }] }))
+  await userEvent.type(screen.getByLabelText('Reserved customer'), 'Nordfreight')
+  await userEvent.type(screen.getByLabelText('Reserved metres'), '50')
+  await userEvent.click(screen.getByRole('button', { name: 'Reserve' }))
+  vi.mocked(pollJob).mockResolvedValue(planResult({ reservations: [] }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Release Nordfreight' }))
+  await waitFor(() => expect(api.plannerPlan).toHaveBeenLastCalledWith(expect.objectContaining({ reservations: [] })))
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Release Nordfreight' })).not.toBeInTheDocument())
+})
+
+test('a refused reservation shows the reason', async () => {
+  await planned()
+  vi.mocked(api.plannerPlan).mockRejectedValue(new ApiError(422, 'Reserved space (5000 m) is more than the usable deck (510 m).'))
+  await userEvent.type(screen.getByLabelText('Reserved customer'), 'Nordfreight')
+  await userEvent.type(screen.getByLabelText('Reserved metres'), '5000')
+  await userEvent.click(screen.getByRole('button', { name: 'Reserve' }))
+  expect(await screen.findByText(/more than the usable deck/)).toBeInTheDocument()
+})
+
+test('a session saved before reservations opens with none', async () => {
+  savePlanner({
+    vessel: { preset: 'demo', broken_stowage_pct: 0.15, n_lanes: 5, lane_length_m: 120 }, bookings: [booking('B1')],
+    placements: { B1: 'L1-Z0' }, demand: { level: 'normal', contract_share: 0.45, spot_rate_multiplier: 1, window_days: 14, hours_to_departure: 72 },
+    log: [],
+  })
+  render(<MemoryRouter><PlannerPage /></MemoryRouter>)
+  await waitFor(() => expect(api.plannerPlan).toHaveBeenCalledWith(expect.objectContaining({ reservations: [] })))
+  expect(await screen.findByText('No space reserved.')).toBeInTheDocument()
 })

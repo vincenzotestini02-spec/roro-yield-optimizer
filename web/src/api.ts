@@ -1,6 +1,6 @@
 import type {
   Decision, Demand, DemandTable, ExportBody, GameState, ImportResult, LabDefaults, LabValues,
-  PlannerBookingIn, PlannerPlan, PlannerVessel, RevealResult,
+  PlannerBookingIn, PlannerPlan, PlannerVessel, ReservationIn, RevealResult,
 } from './types'
 
 const POLL_MS = 1000
@@ -50,6 +50,7 @@ export interface PlannerStateBody {
   vessel: PlannerVessel
   bookings: PlannerBookingIn[]
   placements: Record<string, string>
+  reservations: ReservationIn[]
 }
 interface JobState<T> { status: string; progress: number; result: T | null; error: string | null }
 

@@ -219,12 +219,24 @@ export interface PlannerLogEntry {
   verdict: string | null
 }
 
+export interface ReservationIn {
+  customer: string
+  metres: number
+}
+
+export interface ReservationStatus extends ReservationIn {
+  used: number
+  left: number
+}
+
 export interface PlannerSession {
   vessel: PlannerVessel
   bookings: PlannerBookingIn[]
   placements: Record<string, string>
   demand: Demand
   log: PlannerLogEntry[]
+  // Missing in sessions saved before reserved space existed.
+  reservations?: ReservationIn[]
 }
 
 export interface PlannerPlan {
@@ -235,6 +247,7 @@ export interface PlannerPlan {
   kpis: Kpis
   revenue_known: boolean
   warnings?: string[]
+  reservations?: ReservationStatus[]
 }
 
 export interface RowError {

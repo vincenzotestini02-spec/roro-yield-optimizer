@@ -10,6 +10,9 @@ function isSession(value: unknown): value is PlannerSession {
   return typeof s.vessel === 'object' && s.vessel !== null && Array.isArray(s.bookings)
     && typeof s.placements === 'object' && s.placements !== null && Array.isArray(s.log)
     && typeof s.demand === 'object' && s.demand !== null
+    && (s.reservations === undefined || (Array.isArray(s.reservations) && (s.reservations as unknown[]).every(
+      (r) => typeof r === 'object' && r !== null && typeof (r as Record<string, unknown>).customer === 'string'
+        && typeof (r as Record<string, unknown>).metres === 'number')))
     && (s.bookings as unknown[]).every((b) => typeof b === 'object' && b !== null
       && typeof (b as Record<string, unknown>).booking_id === 'string')
 }
