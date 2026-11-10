@@ -23,6 +23,7 @@ The home page is a planning tool for real bookings:
 2. The planner loads every accepted booking it can. A booking that does not fit is never dropped silently: it is listed with the reason.
 3. Mark units as on board (they never move), move a unit by hand to another zone, and download the plan as PDF or CSV, or save the session as a file.
 4. For a new request, enter its price and ask the advisor. The verdict always shows its demand assumption (for example `Assumption: high demand, 45% contract`). Accepting it re-plans; the units that moved are listed.
+5. Reserve space for a customer: the metres are held on the whole ship and no other customer can use them until you release the reservation. That customer's bookings use the reserved metres first, then the common space. The plan, the advisor and the PDF all respect it, and each reservation shows how much is used and how much is left. A reservation never moves a unit already on board; an accepted booking it pushes out is listed with the reason `space is reserved for …`.
 
 Template columns: `booking_id`, `customer`, `unit_type`, `length_m`, `weight_t`, `discharge_port` (required); `segment`, `is_reefer`, `rate_per_m`, `reefer_fee`, `height_m`, `axle_count`, `on_board` (optional). At most 500 rows and 5 MB; the file is read in memory and never stored. Several discharge ports are accepted but planned as one until a later version.
 

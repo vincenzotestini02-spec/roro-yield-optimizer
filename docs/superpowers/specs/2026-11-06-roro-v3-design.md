@@ -255,7 +255,7 @@ Ogni tappa è rilasciabile e passa test e benchmark prima della successiva.
 | **1. Funzioni rapide** | spazio perso, navi predefinite, PDF, CSV, link | export verificati |
 | **2. Planner** (fatta 2026-11-09: il gioco è su `/game`, la sessione si salva in un file `.json` invece che in un link) | modello Excel, validazione, primo piano, esclusioni spiegate, nuove richieste, rifacimento piano | un Excel d'esempio completa il flusso |
 | **3. Decisioni** | Advisor a tre risposte, intervalli, spostamenti nel gioco e nel planner, test del valore atteso | criteri della sezione 12 |
-| **4. Riserve** | spazio riservato per cliente | test con e senza riserve |
+| **4. Riserve** (fatta 2026-11-10: solo nel Planner; le unità a bordo restano prima delle riserve) | spazio riservato per cliente | test con e senza riserve |
 | **5. Porti** | più porti di scarico e blocchi | ordine di scarico verificato su casi costruiti |
 | **6. Ponti** | più ponti, altezze, assi, carico | vincoli verificati su casi costruiti |
 | **7. Previsione** | `DemandModel` livello 1, poi livello 2, formato del livello 3 | backtest pubblicato, anche se negativo |

@@ -322,8 +322,8 @@ test('the planner verdict shows the decision label and the range', async () => {
 test('a reservation is sent with the plan and its use is shown', async () => {
   await planned()
   vi.mocked(pollJob).mockResolvedValue(planResult({ reservations: [{ customer: 'Nordfreight', metres: 50, used: 14.6, left: 35.4 }] }))
-  await userEvent.type(screen.getByLabelText('Reserved customer'), 'Nordfreight')
-  await userEvent.type(screen.getByLabelText('Reserved metres'), '50')
+  await userEvent.type(screen.getByLabelText('Reservation holder'), 'Nordfreight')
+  await userEvent.type(screen.getByLabelText('Reservation metres'), '50')
   await userEvent.click(screen.getByRole('button', { name: 'Reserve' }))
   await waitFor(() => expect(api.plannerPlan).toHaveBeenLastCalledWith(
     expect.objectContaining({ reservations: [{ customer: 'Nordfreight', metres: 50 }] })))
@@ -336,8 +336,8 @@ test('a reservation is sent with the plan and its use is shown', async () => {
 test('releasing a reservation replans without it', async () => {
   await planned()
   vi.mocked(pollJob).mockResolvedValue(planResult({ reservations: [{ customer: 'Nordfreight', metres: 50, used: 0, left: 50 }] }))
-  await userEvent.type(screen.getByLabelText('Reserved customer'), 'Nordfreight')
-  await userEvent.type(screen.getByLabelText('Reserved metres'), '50')
+  await userEvent.type(screen.getByLabelText('Reservation holder'), 'Nordfreight')
+  await userEvent.type(screen.getByLabelText('Reservation metres'), '50')
   await userEvent.click(screen.getByRole('button', { name: 'Reserve' }))
   vi.mocked(pollJob).mockResolvedValue(planResult({ reservations: [] }))
   await userEvent.click(await screen.findByRole('button', { name: 'Release Nordfreight' }))
@@ -348,8 +348,8 @@ test('releasing a reservation replans without it', async () => {
 test('a refused reservation shows the reason', async () => {
   await planned()
   vi.mocked(api.plannerPlan).mockRejectedValue(new ApiError(422, 'Reserved space (5000 m) is more than the usable deck (510 m).'))
-  await userEvent.type(screen.getByLabelText('Reserved customer'), 'Nordfreight')
-  await userEvent.type(screen.getByLabelText('Reserved metres'), '5000')
+  await userEvent.type(screen.getByLabelText('Reservation holder'), 'Nordfreight')
+  await userEvent.type(screen.getByLabelText('Reservation metres'), '5000')
   await userEvent.click(screen.getByRole('button', { name: 'Reserve' }))
   expect(await screen.findByText(/more than the usable deck/)).toBeInTheDocument()
 })

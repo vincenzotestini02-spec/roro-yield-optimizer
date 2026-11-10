@@ -362,9 +362,9 @@ export function PlannerPage() {
                 </div>
               )}
               <div className="row">
-                <input aria-label="Reserved customer" placeholder="Customer" value={reserveCustomer} maxLength={80}
+                <input aria-label="Reservation holder" placeholder="Customer" value={reserveCustomer} maxLength={80}
                   onChange={(e) => setReserveCustomer(e.target.value)} />
-                <input aria-label="Reserved metres" placeholder="Metres" type="number" min={1} value={reserveMetres}
+                <input aria-label="Reservation metres" placeholder="Metres" type="number" min={1} value={reserveMetres}
                   onChange={(e) => setReserveMetres(e.target.value)} />
                 <button disabled={busy || reserveCustomer.trim() === '' || !(Number(reserveMetres) > 0)} onClick={() => void reserve()}>Reserve</button>
               </div>
