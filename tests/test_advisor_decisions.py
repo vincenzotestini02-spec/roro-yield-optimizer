@@ -11,7 +11,7 @@ def gains(positive: int, k: int = 20, size: float = 100.0) -> list[float]:
 
 
 def test_initial_thresholds():
-    assert (ACCEPT_SHARE, REJECT_SHARE) == (0.6, 0.8)
+    assert (ACCEPT_SHARE, REJECT_SHARE) == (0.6, 0.9)  # calibrated on seeds 101-130
 
 
 def test_clear_majority_accepts():
@@ -19,7 +19,7 @@ def test_clear_majority_accepts():
 
 
 def test_clear_majority_rejects():
-    assert decide(gains(3)) == "reject"
+    assert decide(gains(1)) == "reject"  # 95% unfavourable
 
 
 def test_split_futures_are_your_call():
@@ -27,7 +27,7 @@ def test_split_futures_are_your_call():
 
 
 def test_negative_mean_without_clear_majority_is_your_call():
-    assert decide(gains(6)) == "your_call"  # 70% unfavourable < 80%
+    assert decide(gains(3)) == "your_call"  # 85% unfavourable < 90%
 
 
 def test_your_call_counts_as_accept():

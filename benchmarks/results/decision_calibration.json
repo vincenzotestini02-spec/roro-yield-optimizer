@@ -1,0 +1,170 @@
+{
+  "seeds": [
+    101,
+    130
+  ],
+  "k": 10,
+  "generated_at": "2026-11-09T21:26:53+00:00",
+  "chosen": [
+    0.6,
+    0.9
+  ],
+  "combos": [
+    {
+      "accept_share": 0.5,
+      "reject_share": 0.8,
+      "levels": [
+        {
+          "label": "40",
+          "n_requests": 40,
+          "demand_ratio": 0.7149490740740744,
+          "fcfs": 35078.15386666667,
+          "smart": 35133.764,
+          "smart_vs_fcfs_pct": 0.15853209819625125,
+          "smart_vs_fcfs_se_eur": 105.4625311730847,
+          "lost_to_fcfs": 1,
+          "n_sailings": 30
+        },
+        {
+          "label": "60",
+          "n_requests": 60,
+          "demand_ratio": 1.076518518518519,
+          "fcfs": 41700.545907438944,
+          "smart": 44141.397876883384,
+          "smart_vs_fcfs_pct": 5.853285409889608,
+          "smart_vs_fcfs_se_eur": 335.1477115226726,
+          "lost_to_fcfs": 4,
+          "n_sailings": 30
+        },
+        {
+          "label": "90",
+          "n_requests": 90,
+          "demand_ratio": 1.6114675925925928,
+          "fcfs": 40568.42639635937,
+          "smart": 47337.69087228529,
+          "smart_vs_fcfs_pct": 16.686041528427143,
+          "smart_vs_fcfs_se_eur": 645.7536485419993,
+          "lost_to_fcfs": 2,
+          "n_sailings": 30
+        }
+      ]
+    },
+    {
+      "accept_share": 0.6,
+      "reject_share": 0.8,
+      "levels": [
+        {
+          "label": "40",
+          "n_requests": 40,
+          "demand_ratio": 0.7149490740740744,
+          "fcfs": 35078.15386666667,
+          "smart": 35133.764,
+          "smart_vs_fcfs_pct": 0.15853209819625125,
+          "smart_vs_fcfs_se_eur": 105.4625311730847,
+          "lost_to_fcfs": 1,
+          "n_sailings": 30
+        },
+        {
+          "label": "60",
+          "n_requests": 60,
+          "demand_ratio": 1.076518518518519,
+          "fcfs": 41700.545907438944,
+          "smart": 44141.397876883384,
+          "smart_vs_fcfs_pct": 5.853285409889608,
+          "smart_vs_fcfs_se_eur": 335.1477115226726,
+          "lost_to_fcfs": 4,
+          "n_sailings": 30
+        },
+        {
+          "label": "90",
+          "n_requests": 90,
+          "demand_ratio": 1.6114675925925928,
+          "fcfs": 40568.42639635937,
+          "smart": 47337.69087228529,
+          "smart_vs_fcfs_pct": 16.686041528427143,
+          "smart_vs_fcfs_se_eur": 645.7536485419993,
+          "lost_to_fcfs": 2,
+          "n_sailings": 30
+        }
+      ]
+    },
+    {
+      "accept_share": 0.6,
+      "reject_share": 0.9,
+      "levels": [
+        {
+          "label": "40",
+          "n_requests": 40,
+          "demand_ratio": 0.7149490740740744,
+          "fcfs": 35078.15386666667,
+          "smart": 35085.009666666665,
+          "smart_vs_fcfs_pct": 0.01954435808126931,
+          "smart_vs_fcfs_se_eur": 4.768305346187736,
+          "lost_to_fcfs": 0,
+          "n_sailings": 30
+        },
+        {
+          "label": "60",
+          "n_requests": 60,
+          "demand_ratio": 1.076518518518519,
+          "fcfs": 41700.545907438944,
+          "smart": 43912.67617780931,
+          "smart_vs_fcfs_pct": 5.3047993071374755,
+          "smart_vs_fcfs_se_eur": 307.7194688147724,
+          "lost_to_fcfs": 3,
+          "n_sailings": 30
+        },
+        {
+          "label": "90",
+          "n_requests": 90,
+          "demand_ratio": 1.6114675925925928,
+          "fcfs": 40568.42639635937,
+          "smart": 48033.07536117418,
+          "smart_vs_fcfs_pct": 18.40014422024685,
+          "smart_vs_fcfs_se_eur": 471.20740470323057,
+          "lost_to_fcfs": 0,
+          "n_sailings": 30
+        }
+      ]
+    },
+    {
+      "accept_share": 0.7,
+      "reject_share": 0.9,
+      "levels": [
+        {
+          "label": "40",
+          "n_requests": 40,
+          "demand_ratio": 0.7149490740740744,
+          "fcfs": 35078.15386666667,
+          "smart": 35085.009666666665,
+          "smart_vs_fcfs_pct": 0.01954435808126931,
+          "smart_vs_fcfs_se_eur": 4.768305346187736,
+          "lost_to_fcfs": 0,
+          "n_sailings": 30
+        },
+        {
+          "label": "60",
+          "n_requests": 60,
+          "demand_ratio": 1.076518518518519,
+          "fcfs": 41700.545907438944,
+          "smart": 43912.67617780931,
+          "smart_vs_fcfs_pct": 5.3047993071374755,
+          "smart_vs_fcfs_se_eur": 307.7194688147724,
+          "lost_to_fcfs": 3,
+          "n_sailings": 30
+        },
+        {
+          "label": "90",
+          "n_requests": 90,
+          "demand_ratio": 1.6114675925925928,
+          "fcfs": 40568.42639635937,
+          "smart": 48033.07536117418,
+          "smart_vs_fcfs_pct": 18.40014422024685,
+          "smart_vs_fcfs_se_eur": 471.20740470323057,
+          "lost_to_fcfs": 0,
+          "n_sailings": 30
+        }
+      ]
+    }
+  ]
+}

@@ -114,6 +114,16 @@ The idea is the one behind slot-allocation revenue management in liner shipping:
 
 Here the planner knows how many requests will arrive, which a real planner would not. A tighter deck raises the percentage gain, not total profit. It only knows the demand distribution, not this sailing's future, so a single sailing can go against it; the advantage shows on average.
 
+**Three answers instead of two (v3).** The advisor now says accept, reject or "your call". It rejects only when at least 90% of the sampled futures lose money, and shows the gain range from the 10th to the 90th percentile. The thresholds were calibrated on sailings 101-130 and checked on sailings 1-30 of the reference ship (6 lanes × 120 m, K = 20), where "your call" counts as accept:
+
+| Requests | FCFS | Smart planner | Vs FCFS | Lost to FCFS | Target |
+|---:|---:|---:|---:|---:|---|
+| 40 | 36,790 | 36,790 | 0.0% | 0 of 30 | loss at most 0.5% ✓ |
+| 60 | 40,967 | 43,471 | +6.1% | 3 of 30 | at least +5% ✓ |
+| 90 | 41,091 | 47,888 | +16.5% | 0 of 30 | at least +13% ✓ |
+
+An expected-value rule (one LP over all sampled futures, each future booking capped at 1/K, in the spirit of Main 2024) was tested as a faster alternative. It rejected almost every request, its mean score fell to −29,462 against 43,790 for the sampled futures on 10 sailings, and it took 3.5 s per verdict against 1.4 s, so the product keeps the sampled futures.
+
 **Live timings (v3 on Google Cloud Run, 1 vCPU, 2 GiB, measured 2026-11-09):** advisor verdict median 2.5 s, max 2.7 s over 10 verdicts; first plan (FCFS and optimizer) 3.3 s.
 
 ## Academic grounding

@@ -1,0 +1,53 @@
+{
+  "seeds": [
+    1,
+    30
+  ],
+  "k": 20,
+  "generated_at": "2026-11-10T09:26:20+00:00",
+  "chosen": [
+    0.6,
+    0.9
+  ],
+  "levels": [
+    {
+      "label": "40",
+      "n_requests": 40,
+      "demand_ratio": 0.727166666666667,
+      "fcfs": 36789.9293,
+      "smart": 36789.9293,
+      "smart_vs_fcfs_pct": 0.0,
+      "smart_vs_fcfs_se_eur": 0.0,
+      "lost_to_fcfs": 0,
+      "n_sailings": 30
+    },
+    {
+      "label": "60",
+      "n_requests": 60,
+      "demand_ratio": 1.0805462962962968,
+      "fcfs": 40966.55686735753,
+      "smart": 43471.10596765566,
+      "smart_vs_fcfs_pct": 6.1136431563126425,
+      "smart_vs_fcfs_se_eur": 381.7216120009985,
+      "lost_to_fcfs": 3,
+      "n_sailings": 30
+    },
+    {
+      "label": "90",
+      "n_requests": 90,
+      "demand_ratio": 1.6252731481481484,
+      "fcfs": 41091.35089725376,
+      "smart": 47888.211609353864,
+      "smart_vs_fcfs_pct": 16.540854860418698,
+      "smart_vs_fcfs_se_eur": 508.1349736478455,
+      "lost_to_fcfs": 0,
+      "n_sailings": 30
+    }
+  ],
+  "criteria": {
+    "loss_at_40_at_most_0_5pct": true,
+    "gain_at_60_at_least_5pct": true,
+    "gain_at_90_at_least_13pct": true
+  },
+  "vessel": "6 lanes x 120 m (reference)"
+}

@@ -1,0 +1,121 @@
+{
+  "k": 20,
+  "n_requests": 60,
+  "seeds": [
+    1,
+    10
+  ],
+  "vessel": "6 lanes x 120 m",
+  "generated_at": "2026-11-10T10:03:54+00:00",
+  "summary": {
+    "sailings": 10,
+    "agreement": 0.0,
+    "score_sampled": 43789.83707132783,
+    "score_ev": -29462.012099999996,
+    "score_fcfs": 40430.601327872384,
+    "seconds_per_verdict_sampled": 1.396415323666588,
+    "seconds_per_verdict_ev": 3.531023896332966
+  },
+  "sailings": [
+    {
+      "seed": 1,
+      "fcfs": 43657.950999999994,
+      "sampled": 43657.950999999994,
+      "ev": -36402.424999999996,
+      "agree": 0,
+      "compared": 1,
+      "seconds_sampled": 1.4410211499993844,
+      "seconds_ev": 3.643060224998044
+    },
+    {
+      "seed": 2,
+      "fcfs": 36704.60857438943,
+      "sampled": 42791.76299999999,
+      "ev": -12663.572999999997,
+      "agree": 0,
+      "compared": 1,
+      "seconds_sampled": 1.3801310216687852,
+      "seconds_ev": 3.550732568331296
+    },
+    {
+      "seed": 3,
+      "fcfs": 37236.992,
+      "sampled": 43230.93000000001,
+      "ev": -39449.49399999999,
+      "agree": 0,
+      "compared": 1,
+      "seconds_sampled": 1.3155199283336212,
+      "seconds_ev": 3.403067173337331
+    },
+    {
+      "seed": 4,
+      "fcfs": 41150.26899999999,
+      "sampled": 44020.101,
+      "ev": -38014.937,
+      "agree": 0,
+      "compared": 1,
+      "seconds_sampled": 1.3448604783334304,
+      "seconds_ev": 3.6495478299979975
+    },
+    {
+      "seed": 5,
+      "fcfs": 40621.878,
+      "sampled": 42919.12899999999,
+      "ev": -29826.609999999993,
+      "agree": 0,
+      "compared": 1,
+      "seconds_sampled": 1.3407374466662683,
+      "seconds_ev": 3.4026385516665565
+    },
+    {
+      "seed": 6,
+      "fcfs": 39024.46200000001,
+      "sampled": 42607.311,
+      "ev": -25560.93699999999,
+      "agree": 0,
+      "compared": 1,
+      "seconds_sampled": 1.359803823334126,
+      "seconds_ev": 3.6249528983307147
+    },
+    {
+      "seed": 7,
+      "fcfs": 44981.816,
+      "sampled": 47616.10912994498,
+      "ev": -18856.254,
+      "agree": 0,
+      "compared": 1,
+      "seconds_sampled": 1.588639134999054,
+      "seconds_ev": 3.4621279999953307
+    },
+    {
+      "seed": 8,
+      "fcfs": 37494.53257438943,
+      "sampled": 41388.42,
+      "ev": -34942.08699999999,
+      "agree": 0,
+      "compared": 1,
+      "seconds_sampled": 1.4056536583336614,
+      "seconds_ev": 3.55523118833468
+    },
+    {
+      "seed": 9,
+      "fcfs": 42309.329129944985,
+      "sampled": 46141.909583333334,
+      "ev": -31796.814999999995,
+      "agree": 0,
+      "compared": 1,
+      "seconds_sampled": 1.4331375899967194,
+      "seconds_ev": 3.434600810003273
+    },
+    {
+      "seed": 10,
+      "fcfs": 41124.174999999996,
+      "sampled": 43524.74699999998,
+      "ev": -27106.988999999994,
+      "agree": 0,
+      "compared": 1,
+      "seconds_sampled": 1.3546490050008289,
+      "seconds_ev": 3.5842797183344373
+    }
+  ]
+}

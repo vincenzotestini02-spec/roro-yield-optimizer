@@ -31,7 +31,7 @@ SMART_LABEL = "Smart planner (no foresight)"
 ADVISOR_LABEL = SMART_LABEL
 NEUTRAL_SEED = 0  # the seed the advisor's ScenarioParams carry: never the game's own
 ACCEPT_SHARE = 0.6  # accept when the mean gain is positive and at least this share of futures pays off
-REJECT_SHARE = 0.8  # reject when the mean gain is negative and at least this share of futures loses
+REJECT_SHARE = 0.9  # reject when the mean gain is negative and at least this share of futures loses (calibrated)
 Decision = Literal["accept", "reject", "your_call"]
 LABELS = {"accept": "Accept", "reject": "Reject", "your_call": "Your call"}
 
