@@ -36,7 +36,7 @@ import pulp
 from .deck import DeckState, check_plan
 from .fcfs import solve_fcfs
 from .kpis import objective, plan_ballast
-from .models import ZONES, Booking, Lane, Plan, Scenario, Slot, Vessel
+from .models import ZONES, Booking, Lane, Plan, Scenario, Slot, Vessel, customer_key
 
 OPTIMAL_LABEL = "Best possible (perfect foresight)"
 
@@ -182,6 +182,24 @@ def build_model(
     prob += heel >= -stab.heel_limit_tm - base_mt
     prob += trim <= stab.trim_limit_tm - base_ml
     prob += trim >= -stab.trim_limit_tm - base_ml
+
+    if deck is not None and deck.reservations:
+        # Loaded metres + reserved metres not used yet <= usable deck (see DeckState._reservations_allow).
+        by_id = {b.id: b for b in bookings}
+        total, by_customer = [], {}
+        loads = [(by_id[bid], var) for (bid, _, _), var in y.items()]
+        if forced is not None:
+            loads.append((forced[0], forced_var))
+        for b, var in loads:
+            length = b.effective_length(gap)
+            total.append((var, length))
+            by_customer.setdefault(customer_key(b.customer), []).append((var, length))
+        unused = []
+        for i, (key, quota) in enumerate(deck._quota.items()):
+            u = prob.add_variable(f"unused_reserved_{i}", lowBound=0)
+            prob += pulp.LpAffineExpression(by_customer.get(key, []) + [(u, 1.0)]) >= quota - deck.used_by_customer.get(key, 0.0)
+            unused.append((u, 1.0))
+        prob += pulp.LpAffineExpression(total + unused) <= deck.capacity_m - deck.used_m
     return StowageModel(prob, y, shortfall, bal, forced_var)
 
 

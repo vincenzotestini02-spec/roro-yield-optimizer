@@ -11,13 +11,16 @@ from dataclasses import dataclass, replace
 from typing import Sequence
 
 from .deck import DeckState
-from .models import Booking, Plan, Scenario, Slot, Vessel
+from .models import Booking, Plan, Reservation, Scenario, Slot, Vessel, customer_key
 from .optimizer import solve_optimal
 
 METRE_WEIGHT = 1000.0
 # Staying put is worth less than half a metre of cargo, so the planner never trades loaded
 # metres for fewer moves, but between equally full plans it keeps units where they were.
 KEEP_BONUS = 400.0
+# Bookings of a customer with a reservation fill that reservation first: worth a little more per
+# metre, still far less than a metre of cargo, so no loaded metre is ever traded for it.
+RESERVED_BONUS_PER_M = 50.0
 PLANNER_LABEL = "Planner"
 NO_ROOM = "no zone can take it with the units already planned"
 
@@ -66,8 +69,8 @@ def place_all(deck: DeckState, items: Sequence[tuple[Booking, Slot]]) -> list[tu
 
 
 def _fixed_deck(vessel: Vessel, by_id: dict[str, Booking], previous: dict[str, Slot],
-                on_board: frozenset[str]) -> DeckState:
-    deck = DeckState(vessel)
+                on_board: frozenset[str], reservations: Sequence[Reservation] = ()) -> DeckState:
+    deck = DeckState(vessel, reservations)
     for booking_id in sorted(on_board):
         if booking_id not in previous:
             raise OnBoardConflict(booking_id, "it has no zone in the plan yet")
@@ -94,24 +97,27 @@ def _keep_previous(deck: DeckState, others: Sequence[Booking], previous: dict[st
 
 
 def plan_accepted(vessel: Vessel, bookings: Sequence[Booking], previous: dict[str, Slot] | None = None,
-                  on_board: frozenset[str] = frozenset(), time_limit_s: float = 20) -> PlanningResult:
+                  on_board: frozenset[str] = frozenset(), time_limit_s: float = 20,
+                  reservations: Sequence[Reservation] = ()) -> PlanningResult:
     by_id = {b.id: b for b in bookings}
     previous = {k: v for k, v in (previous or {}).items() if k in by_id}
-    deck = _fixed_deck(vessel, by_id, previous, on_board)
+    deck = _fixed_deck(vessel, by_id, previous, on_board, reservations)
     others = [b for b in bookings if b.id not in on_board]
 
     kept = _keep_previous(deck, others, previous)
     if kept is not None:
         placements = kept.placements
     else:
-        weighted = tuple(replace(b, rate_per_m=METRE_WEIGHT, reefer_fee=0.0, handling_cost=0.0) for b in others)
+        reserved = {customer_key(r.customer) for r in reservations}
+        weighted = tuple(replace(b, rate_per_m=METRE_WEIGHT + (RESERVED_BONUS_PER_M if customer_key(b.customer) in reserved else 0.0),
+                                 reefer_fee=0.0, handling_cost=0.0) for b in others)
         scenario = Scenario(vessel, weighted, 0.0, 0.0)
         start = {k: v for k, v in previous.items() if k not in on_board}
         candidates = (Plan("Previous", start, []),) if start else ()
         placements = solve_optimal(scenario, time_limit_s=time_limit_s, candidates=candidates, deck=deck,
                                    keep=start, keep_bonus=KEEP_BONUS).placements
 
-    final = DeckState(vessel)
+    final = DeckState(vessel, reservations)
     place_all(final, [(by_id[k], slot) for k, slot in placements.items()])
     missing = sorted((b for b in bookings if b.id not in placements), key=lambda b: (-b.length_m, b.id))
     excluded = [(b.id, final.why_not(b) or NO_ROOM) for b in missing]
