@@ -63,3 +63,26 @@ def test_advisor_cannot_load_a_non_reserved_request_into_reserved_space():
     scenario = Scenario(vessel, (request,), 0.0, 0.0)
     v = advise(view_for(scenario, replace(ScenarioParams(), n_requests=30), deck, 0), k=3)
     assert not v.feasible and "reserved for Nordfreight" in v.reason
+
+
+def test_a_reservation_added_after_a_plan_is_respected():
+    # The usual flow: plan first, then reserve. The previous plan must not win over the reservation.
+    vessel, bookings = demo(60)
+    first = plan_accepted(vessel, bookings, time_limit_s=10)
+    capacity = DeckState(vessel).capacity_m
+    again = plan_accepted(vessel, bookings, previous=first.plan.placements,
+                          reservations=[Reservation("Nobody yet", 200.0)], time_limit_s=10)
+    assert used(vessel, bookings, again.plan.placements) <= capacity - 200.0 + 1e-6
+    assert any("reserved for Nobody yet" in reason for _, reason in again.excluded)
+
+
+def test_on_board_units_plus_reservations_beyond_the_deck_load_nothing_else():
+    vessel, bookings = demo(30)
+    first = plan_accepted(vessel, bookings, time_limit_s=5)
+    on_board = frozenset(list(first.plan.placements)[:10])
+    capacity = DeckState(vessel).capacity_m
+    aboard = used(vessel, bookings, on_board)
+    result = plan_accepted(vessel, bookings, previous=first.plan.placements, on_board=on_board,
+                           reservations=[Reservation("Nobody yet", capacity - aboard + 30)], time_limit_s=5)
+    assert set(result.plan.placements) == set(on_board)
+    assert all("reserved for Nobody yet" in reason for _, reason in result.excluded)

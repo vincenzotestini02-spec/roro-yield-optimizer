@@ -261,6 +261,19 @@ def solve_optimal(scenario: Scenario, time_limit_s: float = 3, candidates: Seque
     return _sorted_plan(scenario, best.placements)
 
 
+def _fits_on(deck: DeckState, plan: Plan, free: dict[str, Booking]) -> bool:
+    """Whether the plan's free units all fit on `deck` (reservations included), in any order that works."""
+    trial = deck.copy()
+    pending = [(free[bid], slot) for bid, slot in plan.placements.items() if bid in free]
+    while pending:
+        left = [(b, slot) for b, slot in pending
+                if not (slot in trial.remaining_m and slot in trial.feasible_slots(b) and trial.place(b, slot))]
+        if len(left) == len(pending):
+            return False
+        pending = left
+    return True
+
+
 def _solve_on_deck(scenario: Scenario, time_limit_s: float, candidates: Sequence[Plan], deck: DeckState,
                    keep: dict[str, Slot], keep_bonus: float) -> Plan:
     fixed = dict(deck.placements)
@@ -273,6 +286,10 @@ def _solve_on_deck(scenario: Scenario, time_limit_s: float, candidates: Sequence
         return Plan(OPTIMAL_LABEL, merged, [b.id for b in full.bookings if b.id not in merged])
 
     seeds = [with_fixed(_greedy_on(deck, scenario).placements), *(with_fixed(c.placements) for c in candidates)]
+    free = {b.id: b for b in scenario.bookings}
+    if deck.reservations:
+        # A candidate (the previous plan, say) may predate the reservations: keep only plans that respect them.
+        seeds = [seeds[0], *(s for s in seeds[1:] if _fits_on(deck, s, free))]
     incumbent = _best_of(full, seeds)
 
     model = build_model(scenario.vessel, scenario.bookings, scenario.contract_floor_m,
@@ -289,5 +306,8 @@ def _solve_on_deck(scenario: Scenario, time_limit_s: float, candidates: Sequence
             start[name] = 1.0
     prob.solve(_WarmHiGHS(msg=False, timeLimit=time_limit_s, gapRel=0.005, start=start))
     placements = {bid: Slot(lane_id, z) for (bid, lane_id, z), var in y.items() if (var.value() or 0) > 0.5}
-    best = _best_of(full, [with_fixed(placements), *seeds])
+    milp = with_fixed(placements)
+    if deck.reservations and not _fits_on(deck, milp, free):
+        milp = seeds[0]  # no feasible MILP answer (reservations beyond the free deck): keep the greedy plan
+    best = _best_of(full, [milp, *seeds])
     return _sorted_plan(full, best.placements)
