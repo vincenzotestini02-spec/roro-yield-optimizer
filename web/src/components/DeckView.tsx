@@ -1,3 +1,4 @@
+import type React from 'react'
 import type { Deck } from '../types'
 
 const WIDTH = 1000
@@ -10,6 +11,8 @@ interface Props {
   deck: Deck
   highlightSlots?: string[]
   onSlotClick?: (slot: string) => void
+  onUnitClick?: (bookingId: string) => void
+  selectedUnit?: string | null
 }
 
 function parseSlot(slot: string): { laneId: string; zone: number } {
@@ -17,7 +20,7 @@ function parseSlot(slot: string): { laneId: string; zone: number } {
   return { laneId: slot.slice(0, at), zone: Number(slot.slice(at + 2)) }
 }
 
-export function DeckView({ deck, highlightSlots = [], onSlotClick }: Props) {
+export function DeckView({ deck, highlightSlots = [], onSlotClick, onUnitClick, selectedUnit = null }: Props) {
   const lanes = [...deck.lanes].sort((a, b) => a.y_m - b.y_m)
   const longest = Math.max(1, ...lanes.map((lane) => lane.length_m))
   const scale = (WIDTH - LEFT - 8) / longest
@@ -53,8 +56,13 @@ export function DeckView({ deck, highlightSlots = [], onSlotClick }: Props) {
         used.set(slot, offset + booking.length_m + 0.5)
         const x = LEFT + (zone * (lane.length_m / deck.zones) + offset) * scale
         return (
-          <rect key={booking_id} className={`unit ${booking.segment}`} x={x} y={(yOf.get(laneId) as number) + 4}
-            width={booking.length_m * scale} height={LANE_HEIGHT - 8} rx={2}>
+          <rect key={booking_id} className={`unit ${booking.segment}${selectedUnit === booking_id ? ' selected' : ''}`}
+            x={x} y={(yOf.get(laneId) as number) + 4} width={booking.length_m * scale} height={LANE_HEIGHT - 8} rx={2}
+            {...(onUnitClick ? {
+              role: 'button', tabIndex: 0, 'aria-label': `Unit ${booking_id}`, style: { cursor: 'pointer' },
+              onClick: () => onUnitClick(booking_id),
+              onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') onUnitClick(booking_id) },
+            } : {})}>
             <title>{`${booking.id} · ${booking.customer} · ${booking.unit_label} · ${booking.length_m} m · ${booking.weight_t} t`}</title>
           </rect>
         )

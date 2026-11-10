@@ -31,3 +31,12 @@ test('only highlighted slots can be clicked', async () => {
   await userEvent.click(picks[0])
   expect(onSlotClick).toHaveBeenCalledWith('L1-Z1')
 })
+
+test('units are clickable only when a click handler is given', async () => {
+  const { rerender } = render(<DeckView deck={loaded} />)
+  expect(screen.queryByRole('button', { name: 'Unit B1' })).toBeNull()
+  const onUnitClick = vi.fn()
+  rerender(<DeckView deck={loaded} onUnitClick={onUnitClick} />)
+  await userEvent.click(screen.getByRole('button', { name: 'Unit B1' }))
+  expect(onUnitClick).toHaveBeenCalledWith('B1')
+})

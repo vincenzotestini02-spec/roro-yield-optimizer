@@ -43,7 +43,8 @@ function AdvisorTable({ game, requests }: { game: SavedGame; requests: Booking[]
           {requests.map((b, i) => {
             const you = actions.get(b.id)
             const v = game.verdicts[b.id]
-            const advisor = v === undefined ? 'n/a' : `${v.accept ? 'accept' : 'reject'}${v.feasible ? '' : " (doesn't fit)"}`
+            const label = v === undefined ? '' : { accept: 'accept', reject: 'reject', your_call: 'your call' }[v.decision ?? (v.accept ? 'accept' : 'reject')]
+            const advisor = v === undefined ? 'n/a' : `${label}${v.feasible ? '' : " (doesn't fit)"}`
             const disagrees = v !== undefined && v.accept !== (you === 'accept')
             return (
               <tr key={b.id}>
@@ -164,6 +165,7 @@ export function RevealPage() {
           {best ? <PlanCard plan={best.plan} fcfs={reveal.fcfs} /> : <Waiting label="Best possible" note="Waits for the smart planner." />}
         </div>
       )}
+      {reveal?.notes?.map((n) => <p key={n} className="small muted">{n}</p>)}
       {reveal && !smart && !smartFailed && <JobProgress label="The smart planner is playing this sailing" progress={progress} />}
       {plan && (
         <section className="card">

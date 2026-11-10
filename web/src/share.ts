@@ -30,7 +30,8 @@ function parse(code: string): unknown {
 }
 
 export function encodeGame(game: SharedGame): string {
-  const d = game.decisions.map((x) => [x.booking_id, x.action === 'accept' ? 'a' : 'r', x.slot])
+  const code = { accept: 'a', reject: 'r', move: 'm' } as const
+  const d = game.decisions.map((x) => [x.booking_id, code[x.action], x.slot])
   return toBase64Url(JSON.stringify({ s: game.seed, d }))
 }
 
@@ -41,8 +42,10 @@ export function decodeGame(code: string): SharedGame | null {
   for (const item of data.d) {
     if (!Array.isArray(item) || item.length !== 3) return null
     const [id, act, slot] = item
-    if (typeof id !== 'string' || (act !== 'a' && act !== 'r') || !(slot === null || typeof slot === 'string')) return null
-    decisions.push({ booking_id: id, action: act === 'a' ? 'accept' : 'reject', slot })
+    const action = act === 'a' ? 'accept' : act === 'r' ? 'reject' : act === 'm' ? 'move' : null
+    if (typeof id !== 'string' || action === null || !(slot === null || typeof slot === 'string')) return null
+    if (action === 'move' && slot === null) return null
+    decisions.push({ booking_id: id, action, slot })
   }
   return { seed: data.s as number, decisions }
 }

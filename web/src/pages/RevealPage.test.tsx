@@ -119,3 +119,24 @@ test('export buttons download the plan on screen', async () => {
   screen.getByRole('button', { name: 'Download PDF' }).click()
   await waitFor(() => expect(api.exportPlan).toHaveBeenCalledWith(expect.objectContaining({ source: 'game', plan_key: 'fcfs', seed: 3 }), 'pdf'))
 })
+
+test('the reveal table shows your call', async () => {
+  pollMock.mockImplementation(() => new Promise(() => {}))
+  saveGame({
+    seed: 3, decisions: [{ booking_id: 'B1', action: 'reject', slot: null }, { booking_id: 'B2', action: 'reject', slot: null }],
+    verdicts: { B1: verdict({ booking_id: 'B1', decision: 'your_call' }) },
+  })
+  show()
+  const row = (await screen.findByText(/^B1 /)).closest('tr') as HTMLElement
+  expect(row).toHaveTextContent('your call')
+})
+
+test('the reveal shows that the smart planner knew n', async () => {
+  pollMock.mockImplementation(() => new Promise(() => {}))
+  vi.mocked(api.reveal).mockResolvedValue({
+    you: planResult('You', 1000), fcfs: planResult('FCFS', 2000), smart_job: 's1',
+    notes: ['The smart planner knew how many requests the sailing would get.'],
+  })
+  show()
+  await screen.findByText(/knew how many requests/)
+})

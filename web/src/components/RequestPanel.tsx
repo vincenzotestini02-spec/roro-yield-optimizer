@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Demand, PlannerBookingIn, PlannerVerdict } from '../types'
+import { DecisionTag } from './DecisionTag'
 
 const UNITS: Record<string, { label: string; length: number; weight: number }> = {
   semi_trailer: { label: 'Semi-trailer', length: 13.6, weight: 22 },
@@ -104,7 +105,8 @@ export function RequestPanel({ demand, onDemand, verdict, asking, onAsk, onDecid
       </div>
       {verdict && verdict.booking_id === request.booking_id && (
         <div className="stack">
-          <p><strong>Advisor:</strong> {verdict.text}</p>
+          <p><strong>Advisor:</strong> <DecisionTag verdict={verdict} /></p>
+          <p>{verdict.text}</p>
           <p className="small muted">{verdict.assumption}</p>
           <div className="row">
             <button className="primary" onClick={() => decide(true)}>Accept request</button>

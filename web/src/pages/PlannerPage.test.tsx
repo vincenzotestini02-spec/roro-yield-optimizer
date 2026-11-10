@@ -307,3 +307,14 @@ test('plan warnings are shown', async () => {
   await planned()
   await screen.findByText(/marked on board but has no zone yet/)
 })
+
+test('the planner verdict shows the decision label and the range', async () => {
+  vi.mocked(api.plannerAdvise).mockResolvedValue({ job_id: 'a1' })
+  await planned()
+  await fillRequest()
+  vi.mocked(pollJob).mockResolvedValue({ ...plannerVerdict, decision: 'your_call', gain_low: -200, gain_high: 300, moves: [],
+    pays_off_share: 0.55, text: 'Your call — pays off in 11 of 20 futures, expected gain +€20 (range −€200 to +€300)' })
+  await userEvent.click(screen.getByRole('button', { name: 'Ask the advisor' }))
+  await screen.findByText('Your call')
+  expect(screen.getByText(/range −€200 to \+€300/)).toBeInTheDocument()
+})

@@ -1,6 +1,6 @@
 export interface Decision {
   booking_id: string
-  action: 'accept' | 'reject'
+  action: 'accept' | 'reject' | 'move'
   slot: string | null
 }
 
@@ -62,6 +62,8 @@ export interface GameState {
   floor_at_risk: boolean
   contract_floor_m: number
   shortfall_penalty_per_m: number
+  moves: number
+  move_cost_eur: number
 }
 
 export interface Verdict {
@@ -73,6 +75,11 @@ export interface Verdict {
   expected_gain_eur: number
   reason: string | null
   text: string
+  decision: 'accept' | 'reject' | 'your_call'
+  pays_off_share: number
+  gain_low: number
+  gain_high: number
+  moves: { booking_id: string; from_slot: string; to_slot: string }[]
 }
 
 export interface Kpis {
@@ -107,6 +114,7 @@ export interface RevealResult {
   you: PlanResult
   fcfs: PlanResult
   smart_job: string
+  notes?: string[]
 }
 
 export interface CostlyDecision {

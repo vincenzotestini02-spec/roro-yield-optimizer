@@ -16,11 +16,12 @@ export const deck = (over: Partial<Deck> = {}): Deck => ({
 export const gameState = (over: Partial<GameState> = {}): GameState => ({
   seed: 5, index: 0, n_total: 60, finished: false, current: booking('B001'), past: [], deck: deck(),
   feasible_slots: ['L1-Z0', 'L2-Z0'], best_slot: 'L1-Z0', cannot_load_reason: null, floor_at_risk: false,
-  contract_floor_m: 210, shortfall_penalty_per_m: 200, ...over,
+  contract_floor_m: 210, shortfall_penalty_per_m: 200, moves: 0, move_cost_eur: 0, ...over,
 })
 
 export const verdict = (over: Partial<Verdict> = {}): Verdict => ({
   booking_id: 'B001', accept: true, feasible: true, n_pays_off: 15, k: 20, expected_gain_eur: 300, reason: null,
+  decision: 'accept', pays_off_share: 0.75, gain_low: -40, gain_high: 620, moves: [],
   text: 'Accept — pays off in 15 of 20 futures, expected gain +€300', ...over,
 })
 

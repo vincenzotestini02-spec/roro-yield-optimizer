@@ -163,3 +163,62 @@ test('a server error can be retried', async () => {
   await userEvent.click(await screen.findByRole('button', { name: 'Try again' }))
   await screen.findByText(/Request 1 of 60/)
 })
+
+const loadedDeck = () => gameState({
+  deck: { ...gameState().deck, placements: [{ booking_id: 'B000', slot: 'L1-Z0', booking: booking('B000') }] },
+})
+
+test('a unit can be moved on the deck and the move is saved', async () => {
+  gameMock.mockResolvedValue(loadedDeck())
+  show()
+  await screen.findByText(/Request 1 of 60/)
+  await userEvent.click(screen.getByRole('button', { name: 'Move a unit' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Unit B000' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Zone L2-Z0' }))
+  await waitFor(() => expect(gameMock.mock.lastCall?.[1]).toEqual([{ booking_id: 'B000', action: 'move', slot: 'L2-Z0' }]))
+})
+
+test('a refused move shows the reason and changes nothing', async () => {
+  gameMock.mockResolvedValue(loadedDeck())
+  show()
+  await screen.findByText(/Request 1 of 60/)
+  gameMock.mockRejectedValueOnce(new ApiError(422, 'B000 cannot move: it does not fit there (space or stability).'))
+  await userEvent.click(screen.getByRole('button', { name: 'Move a unit' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Unit B000' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Zone L2-Z0' }))
+  await screen.findByText(/does not fit there/)
+  expect(screen.getByText(/Request 1 of 60/)).toBeInTheDocument()
+})
+
+test('the move counter shows the cost', async () => {
+  gameMock.mockResolvedValue(gameState({ moves: 2, move_cost_eur: 160 }))
+  show()
+  await screen.findByText('Moves: 2 (−€160)')
+})
+
+test('your call is shown with the share and the range', async () => {
+  vi.mocked(pollJob).mockResolvedValue(verdict({
+    decision: 'your_call', n_pays_off: 11, pays_off_share: 0.55, gain_low: -300, gain_high: 380,
+    text: 'Your call — pays off in 11 of 20 futures, expected gain +€20 (range −€300 to +€380)',
+  }))
+  show()
+  await screen.findByText(/Request 1 of 60/)
+  await userEvent.click(screen.getByRole('button', { name: 'Advisor on' }))
+  await screen.findByText('Your call')
+  expect(screen.getByText(/range −€300 to \+€380/)).toBeInTheDocument()
+})
+
+test('apply moves and accept sends the moves first, then the accept', async () => {
+  vi.mocked(pollJob).mockResolvedValue(verdict({
+    moves: [{ booking_id: 'B000', from_slot: 'L1-Z0', to_slot: 'L2-Z0' }],
+    text: 'Move B000 from L1-Z0 to L2-Z0, then: Accept — pays off in 15 of 20 futures',
+  }))
+  show()
+  await screen.findByText(/Request 1 of 60/)
+  await userEvent.click(screen.getByRole('button', { name: 'Advisor on' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Apply moves and accept' }))
+  await waitFor(() => expect(gameMock.mock.lastCall?.[1]).toEqual([
+    { booking_id: 'B000', action: 'move', slot: 'L2-Z0' },
+    { booking_id: 'B001', action: 'accept', slot: null },
+  ]))
+})

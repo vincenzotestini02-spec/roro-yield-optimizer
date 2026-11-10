@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, ApiError, pollJob } from '../api'
 import { DeckView } from '../components/DeckView'
+import { DecisionTag } from '../components/DecisionTag'
 import { StabilityView } from '../components/StabilityView'
 import { clearGame, loadGame, saveGame } from '../storage'
 import type { Booking, Decision, GameState, SavedGame, Verdict } from '../types'
@@ -46,6 +47,8 @@ export function GamePage() {
   const [advisorOn, setAdvisorOn] = useState(false)
   const [verdictError, setVerdictError] = useState<string | null>(null)
   const [verdictTry, setVerdictTry] = useState(0)
+  const [moveMode, setMoveMode] = useState(false)
+  const [moving, setMoving] = useState<string | null>(null)
   const gameRef = useRef(game)
 
   const store = useCallback((next: SavedGame) => {
@@ -103,8 +106,27 @@ export function GamePage() {
     }
   }, [advisorOn, currentId, verdictTry, store])
 
-  function decide(decision: Decision) {
-    void load({ ...gameRef.current, decisions: [...gameRef.current.decisions, decision] })
+  function decide(...decisions: Decision[]) {
+    const now = gameRef.current
+    let verdicts = now.verdicts
+    if (decisions.some((d) => d.action === 'move') && currentId !== undefined) {
+      // The deck changes, so the verdict on the current request no longer holds.
+      verdicts = Object.fromEntries(Object.entries(verdicts).filter(([id]) => id !== currentId))
+    }
+    void load({ ...now, verdicts, decisions: [...now.decisions, ...decisions] })
+  }
+
+  function moveTo(slot: string) {
+    if (moving === null) return
+    decide({ booking_id: moving, action: 'move', slot })
+    setMoving(null)
+    setMoveMode(false)
+  }
+
+  function applyMovesAndAccept() {
+    if (!verdict || currentId === undefined) return
+    const moves: Decision[] = verdict.moves.map((m) => ({ booking_id: m.booking_id, action: 'move', slot: m.to_slot }))
+    decide(...moves, { booking_id: currentId, action: 'accept', slot: null })
   }
 
   function accept() {
@@ -152,15 +174,27 @@ export function GamePage() {
             <button aria-pressed={manual} onClick={() => setPlacement(true)}>I place them</button>
           </div>
           <button aria-pressed={advisorOn} onClick={() => setAdvisorOn(!advisorOn)}>{advisorOn ? 'Advisor off' : 'Advisor on'}</button>
+          <button aria-pressed={moveMode} onClick={() => { setMoveMode(!moveMode); setMoving(null) }}>
+            {moveMode ? 'Stop moving' : 'Move a unit'}
+          </button>
           <button onClick={restart}>New sailing</button>
         </div>
+        {state.moves > 0 && <p className="small">Moves: {state.moves} (−€{state.move_cost_eur.toFixed(0)})</p>}
       </div>
       <div className="grid-2">
         <section className="card" aria-label="Current request">
           <strong>Request {state.index + 1} of {state.n_total}</strong>
           <div className="progress"><div style={{ width: `${(state.index / state.n_total) * 100}%` }} /></div>
           {current && <RequestCard b={current} />}
-          {advisorOn && verdict && <p><strong>Advisor:</strong> {verdict.text}</p>}
+          {advisorOn && verdict && (
+            <div className="stack">
+              <p><strong>Advisor:</strong> <DecisionTag verdict={verdict} /></p>
+              <p>{verdict.text}</p>
+              {verdict.moves.length > 0 && (
+                <div><button className="primary" disabled={busy} onClick={applyMovesAndAccept}>Apply moves and accept</button></div>
+              )}
+            </div>
+          )}
           {advisorOn && !verdict && !verdictError && <p className="muted small">The advisor is playing out possible futures…</p>}
           {advisorOn && verdictError && (
             <div className="notice stack">
@@ -189,7 +223,20 @@ export function GamePage() {
           </div>
           <div className="card">
             <DeckView deck={deck} highlightSlots={picking ? state.feasible_slots : []}
-              onSlotClick={(slot) => decide({ booking_id: currentId as string, action: 'accept', slot })} />
+              onSlotClick={(slot) => decide({ booking_id: currentId as string, action: 'accept', slot })}
+              onUnitClick={moveMode ? setMoving : undefined} selectedUnit={moving} />
+            {moveMode && (
+              <div className="stack">
+                <p className="small">{moving === null ? 'Click a unit on the deck to move it. Each move costs €80.' : `Move ${moving} to:`}</p>
+                {moving !== null && (
+                  <div className="row">
+                    {deck.lanes.flatMap((lane) => Array.from({ length: deck.zones }, (_, z) => `${lane.id}-Z${z}`)).map((slot) => (
+                      <button key={slot} aria-label={`Zone ${slot}`} disabled={busy} onClick={() => moveTo(slot)}>{slot}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {picking && (
               <div className="row">
                 {state.feasible_slots.map((slot) => (

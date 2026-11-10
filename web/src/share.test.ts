@@ -36,3 +36,11 @@ test('lab values survive encode and decode', () => {
   const limits = { n_lanes: [1, 16] as [number, number] }
   expect(decodeLab(encodeLab({ n_lanes: 4 }), limits)).toEqual({ n_lanes: 4 })
 })
+
+test('a shared game with a move survives encode and decode', () => {
+  const withMove = { seed: 9, decisions: [
+    { booking_id: 'B001', action: 'accept' as const, slot: null },
+    { booking_id: 'B001', action: 'move' as const, slot: 'L2-Z1' },
+  ] }
+  expect(decodeGame(encodeGame(withMove))).toEqual(withMove)
+})
