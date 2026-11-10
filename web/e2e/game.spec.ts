@@ -91,3 +91,27 @@ test('choosing the RoPax preset runs a comparison', async ({ page }) => {
   await page.getByLabel('Vessel').selectOption('ropax')
   await expect(page.getByText(/Usable 1800 of 1800 lane-m/)).toBeVisible({ timeout: 240_000 })
 })
+
+test('a unit is moved during the game and the reveal counts the move', async ({ page }) => {
+  test.setTimeout(240_000)
+  await page.goto('/game')
+  await page.getByRole('button', { name: 'Accept' }).click()
+  await expect(page.getByText(/Request 2 of 60/)).toBeVisible()
+  await page.getByRole('button', { name: 'Move a unit' }).click()
+  await page.getByRole('button', { name: /^Unit / }).first().click()
+  await page.getByRole('button', { name: 'Zone L5-Z3' }).click()
+  await expect(page.getByText(/Moves: 1 \(−€80\)/)).toBeVisible()
+  const reject = page.getByRole('button', { name: 'Reject' })
+  const revealed = page.getByRole('heading', { name: /The ship has sailed/ })
+  while (!(await revealed.isVisible().catch(() => false))) {
+    if (await reject.isEnabled().catch(() => false)) await reject.click().catch(() => {})
+    await page.waitForTimeout(20)
+  }
+  await expect(page.getByText(/€80 in handling/)).toBeVisible()
+})
+
+test('the advisor shows a decision label', async ({ page }) => {
+  await page.goto('/game')
+  await page.getByRole('button', { name: 'Advisor on' }).click()
+  await expect(page.locator('.tag.decision').first()).toBeVisible({ timeout: 60_000 })
+})
