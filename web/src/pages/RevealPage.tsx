@@ -22,6 +22,7 @@ function PlanCard({ plan, fcfs }: { plan: PlanResult; fcfs: PlanResult }) {
         RevPAL €{k.revpal.toFixed(1)}/lm · deck {k.deck_util_pct.toFixed(0)}% · DWT {k.dwt_pct.toFixed(0)}% · {k.n_accepted} units
         {k.shortfall_m > 0 ? ` · shortfall ${k.shortfall_m.toFixed(0)} m (−€${k.penalty.toFixed(0)})` : ''}
         {` · ballast ${k.ballast_t.toFixed(0)} t · heel ${k.heel_deg.toFixed(1)}° · trim ${k.trim_m.toFixed(2)} m`}
+        {k.moves > 0 ? ` · ${k.moves} moves (−€${k.move_cost.toFixed(0)})` : ''}
       </span>
     </div>
   )

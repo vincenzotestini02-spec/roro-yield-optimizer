@@ -6,116 +6,116 @@
     10
   ],
   "vessel": "6 lanes x 120 m",
-  "generated_at": "2026-11-10T10:03:54+00:00",
+  "generated_at": "2026-11-10T11:06:29+00:00",
   "summary": {
     "sailings": 10,
-    "agreement": 0.0,
+    "agreement": 0.81,
     "score_sampled": 43789.83707132783,
-    "score_ev": -29462.012099999996,
+    "score_ev": 43829.23814632783,
     "score_fcfs": 40430.601327872384,
-    "seconds_per_verdict_sampled": 1.396415323666588,
-    "seconds_per_verdict_ev": 3.531023896332966
+    "seconds_per_verdict_sampled": 1.8508472728338285,
+    "seconds_per_verdict_ev": 7.529662301668237
   },
   "sailings": [
     {
       "seed": 1,
       "fcfs": 43657.950999999994,
       "sampled": 43657.950999999994,
-      "ev": -36402.424999999996,
-      "agree": 0,
-      "compared": 1,
-      "seconds_sampled": 1.4410211499993844,
-      "seconds_ev": 3.643060224998044
+      "ev": 38973.65646327831,
+      "agree": 50,
+      "compared": 60,
+      "seconds_sampled": 1.8636583699990297,
+      "seconds_ev": 6.16158780833745
     },
     {
       "seed": 2,
       "fcfs": 36704.60857438943,
       "sampled": 42791.76299999999,
-      "ev": -12663.572999999997,
-      "agree": 0,
-      "compared": 1,
-      "seconds_sampled": 1.3801310216687852,
-      "seconds_ev": 3.550732568331296
+      "ev": 42880.05499999999,
+      "agree": 49,
+      "compared": 60,
+      "seconds_sampled": 1.8753974816694001,
+      "seconds_ev": 7.156615508340959
     },
     {
       "seed": 3,
       "fcfs": 37236.992,
       "sampled": 43230.93000000001,
-      "ev": -39449.49399999999,
-      "agree": 0,
-      "compared": 1,
-      "seconds_sampled": 1.3155199283336212,
-      "seconds_ev": 3.403067173337331
+      "ev": 44182.48700000001,
+      "agree": 51,
+      "compared": 60,
+      "seconds_sampled": 1.818786339999254,
+      "seconds_ev": 6.805454875005913
     },
     {
       "seed": 4,
       "fcfs": 41150.26899999999,
       "sampled": 44020.101,
-      "ev": -38014.937,
-      "agree": 0,
-      "compared": 1,
-      "seconds_sampled": 1.3448604783334304,
-      "seconds_ev": 3.6495478299979975
+      "ev": 42475.453833333326,
+      "agree": 46,
+      "compared": 60,
+      "seconds_sampled": 1.7381691299999753,
+      "seconds_ev": 8.26808090833365
     },
     {
       "seed": 5,
       "fcfs": 40621.878,
       "sampled": 42919.12899999999,
-      "ev": -29826.609999999993,
-      "agree": 0,
-      "compared": 1,
-      "seconds_sampled": 1.3407374466662683,
-      "seconds_ev": 3.4026385516665565
+      "ev": 43391.952999999994,
+      "agree": 47,
+      "compared": 60,
+      "seconds_sampled": 1.7111580266675446,
+      "seconds_ev": 5.684080846667833
     },
     {
       "seed": 6,
       "fcfs": 39024.46200000001,
       "sampled": 42607.311,
-      "ev": -25560.93699999999,
-      "agree": 0,
-      "compared": 1,
-      "seconds_sampled": 1.359803823334126,
-      "seconds_ev": 3.6249528983307147
+      "ev": 44053.477,
+      "agree": 48,
+      "compared": 60,
+      "seconds_sampled": 1.9258171266662734,
+      "seconds_ev": 9.715889398329697
     },
     {
       "seed": 7,
       "fcfs": 44981.816,
       "sampled": 47616.10912994498,
-      "ev": -18856.254,
-      "agree": 0,
-      "compared": 1,
-      "seconds_sampled": 1.588639134999054,
-      "seconds_ev": 3.4621279999953307
+      "ev": 47094.787000000004,
+      "agree": 54,
+      "compared": 60,
+      "seconds_sampled": 2.2790881899990683,
+      "seconds_ev": 6.666615226667878
     },
     {
       "seed": 8,
       "fcfs": 37494.53257438943,
       "sampled": 41388.42,
-      "ev": -34942.08699999999,
-      "agree": 0,
-      "compared": 1,
-      "seconds_sampled": 1.4056536583336614,
-      "seconds_ev": 3.55523118833468
+      "ev": 45223.33958333333,
+      "agree": 44,
+      "compared": 60,
+      "seconds_sampled": 1.5688104666691893,
+      "seconds_ev": 9.041364964995106
     },
     {
       "seed": 9,
       "fcfs": 42309.329129944985,
       "sampled": 46141.909583333334,
-      "ev": -31796.814999999995,
-      "agree": 0,
-      "compared": 1,
-      "seconds_sampled": 1.4331375899967194,
-      "seconds_ev": 3.434600810003273
+      "ev": 46977.61558333333,
+      "agree": 46,
+      "compared": 60,
+      "seconds_sampled": 2.0698529433303823,
+      "seconds_ev": 7.761735928337051
     },
     {
       "seed": 10,
       "fcfs": 41124.174999999996,
       "sampled": 43524.74699999998,
-      "ev": -27106.988999999994,
-      "agree": 0,
-      "compared": 1,
-      "seconds_sampled": 1.3546490050008289,
-      "seconds_ev": 3.5842797183344373
+      "ev": 43039.556999999986,
+      "agree": 51,
+      "compared": 60,
+      "seconds_sampled": 1.6577346533381692,
+      "seconds_ev": 8.035197551666837
     }
   ]
 }

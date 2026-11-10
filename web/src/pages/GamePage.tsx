@@ -76,6 +76,7 @@ export function GamePage() {
   useEffect(() => { void load(gameRef.current) }, [load])
 
   const currentId = state?.current?.id
+  const decisionCount = game.decisions.length  // a move keeps the request but changes the deck
   const verdict: Verdict | undefined = currentId === undefined ? undefined : game.verdicts[currentId]
 
   useEffect(() => {
@@ -104,7 +105,7 @@ export function GamePage() {
       // The player moved on: free the queue for the verdicts still to come.
       if (openJob !== null) void api.cancelJob(openJob).catch(() => {})
     }
-  }, [advisorOn, currentId, verdictTry, store])
+  }, [advisorOn, currentId, decisionCount, verdictTry, store])
 
   function decide(...decisions: Decision[]) {
     const now = gameRef.current

@@ -64,3 +64,8 @@ def test_planner_verdict_has_the_new_fields_and_no_moves(client, wait):
     job = client.post("/api/planner/advise", json={**body, "request": request, "demand": {"level": "normal"}}).json()
     v = wait(client, job["job_id"], timeout=60)["result"]
     assert v["decision"] in ("accept", "reject", "your_call") and v["moves"] == []
+
+
+def test_no_handling_note_without_moves(client, finished_game):
+    r = client.post("/api/reveal", json=finished_game).json()
+    assert not any("handling" in n for n in r["notes"])

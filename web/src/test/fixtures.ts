@@ -27,7 +27,7 @@ export const verdict = (over: Partial<Verdict> = {}): Verdict => ({
 
 export const kpis = (method: string, objective: number): Kpis => ({
   method, n_accepted: 40, revenue: 60000, margin: objective, shortfall_m: 0, penalty: 0, objective, revpal: 83,
-  deck_util_pct: 90, dwt_pct: 70, plugs_used: 5, contract_m: 200, ballast_t: 20, ballast_cost: 100, heel_deg: 0.1, trim_m: 0.1,
+  deck_util_pct: 90, dwt_pct: 70, plugs_used: 5, contract_m: 200, ballast_t: 20, ballast_cost: 100, heel_deg: 0.1, trim_m: 0.1, moves: 0, move_cost: 0,
 })
 
 export const planResult = (method: string, objective: number): PlanResult => ({

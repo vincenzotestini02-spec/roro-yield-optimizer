@@ -140,3 +140,13 @@ test('the reveal shows that the smart planner knew n', async () => {
   show()
   await screen.findByText(/knew how many requests/)
 })
+
+test('your card shows your moves and their cost', async () => {
+  pollMock.mockImplementation(() => new Promise(() => {}))
+  const you = planResult('You', 1000)
+  vi.mocked(api.reveal).mockResolvedValue({
+    you: { ...you, kpis: { ...you.kpis, moves: 2, move_cost: 160 } }, fcfs: planResult('FCFS', 2000), smart_job: 's1',
+  })
+  show()
+  await screen.findByText(/2 moves \(−€160\)/)
+})

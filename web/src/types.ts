@@ -99,6 +99,8 @@ export interface Kpis {
   ballast_cost: number
   heel_deg: number
   trim_m: number
+  moves: number
+  move_cost: number
 }
 
 export interface PlanResult {

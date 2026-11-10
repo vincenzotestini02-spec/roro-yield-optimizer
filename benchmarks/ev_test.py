@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from multiprocessing import Pool
 
 import numpy as np
+import pulp
 
 from roro_yield.advisor import _contract_m, _solve_value, advise, view_for
 from roro_yield.deck import DeckState
@@ -46,8 +47,11 @@ def ev_gain(view, k: int = K) -> float | None:
     requested = _contract_m(view.history) + _contract_m([current])
     floor = min(view.commitment_m, requested + _contract_m(union) / k)
     model = build_model(view.vessel, union, floor, view.penalty_per_m, relaxed=True, deck=deck, forced=(current, slot))
+    per_booking: dict[str, list] = {}
     for (bid, _, _), var in model.y.items():
-        var.upBound = 1.0 / k
+        per_booking.setdefault(bid, []).append(var)
+    for bid, variables in per_booking.items():
+        model.prob += pulp.lpSum(variables) <= 1.0 / k, f"ev_cap_{bid}"  # each future booking counts 1/K
     values = []
     for loaded in (1, 0):
         model.forced.lowBound = model.forced.upBound = loaded
@@ -69,10 +73,10 @@ def _sailing(seed: int) -> dict:
         gain = ev_gain(view_for(s, params, decks["ev"], index))
         t_ev += time.perf_counter() - start
         ev_accept = gain is not None and gain > 1e-9
-        same_deck = decks["sampled"].placements == decks["ev"].placements
-        if same_deck:
-            total += 1
-            agree += int(v.accept == ev_accept)
+        # Agreement is judged on the same deck: the expected-value verdict on the sampled planner's deck.
+        on_same = ev_gain(view_for(s, params, decks["sampled"], index))
+        total += 1
+        agree += int(v.accept == (on_same is not None and on_same > 1e-9))
         for name, accept in (("sampled", v.accept), ("ev", ev_accept)):
             if accept and decks[name].why_not(b) is None:
                 decks[name].place(b)

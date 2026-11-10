@@ -37,3 +37,24 @@ def test_advisor_uses_the_calibrated_thresholds():
 def test_ev_experiment_is_published():
     data = json.loads((RESULTS / "ev_test.json").read_text(encoding="utf-8"))
     assert data["summary"]["sailings"] == 10 and 0 <= data["summary"]["agreement"] <= 1
+
+
+def test_the_expected_value_rule_caps_each_future_booking():
+    from dataclasses import replace
+
+    from benchmarks.ev_test import ev_gain
+    from roro_yield.advisor import advise, view_for
+    from roro_yield.deck import DeckState
+    from roro_yield.simulator import ScenarioParams, generate_scenario
+
+    params = replace(ScenarioParams(), n_requests=60, seed=1)
+    s = generate_scenario(params)
+    deck = DeckState(s.vessel)
+    agree = 0
+    for index in range(6):
+        sampled = advise(view_for(s, params, deck, index), k=10, suggest_moves=False)
+        gain = ev_gain(view_for(s, params, deck, index), k=10)
+        agree += int(sampled.accept == (gain is not None and gain > 1e-9))
+        if sampled.accept:
+            deck.place(s.bookings[index])
+    assert agree >= 4  # a per-slot cap made the rule reject everything

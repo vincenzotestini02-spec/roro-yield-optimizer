@@ -222,3 +222,17 @@ test('apply moves and accept sends the moves first, then the accept', async () =
     { booking_id: 'B001', action: 'accept', slot: null },
   ]))
 })
+
+test('after a move the advisor judges the request again on the new deck', async () => {
+  gameMock.mockResolvedValue(loadedDeck())
+  show()
+  await screen.findByText(/Request 1 of 60/)
+  await userEvent.click(screen.getByRole('button', { name: 'Advisor on' }))
+  await screen.findByText(/pays off in 15 of 20/)
+  const asked = vi.mocked(api.startVerdict).mock.calls.length
+  await userEvent.click(screen.getByRole('button', { name: 'Move a unit' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Unit B000' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Zone L2-Z0' }))
+  await waitFor(() => expect(vi.mocked(api.startVerdict).mock.calls.length).toBeGreaterThan(asked))
+  expect(vi.mocked(api.startVerdict).mock.lastCall?.[1]).toEqual([{ booking_id: 'B000', action: 'move', slot: 'L2-Z0' }])
+})

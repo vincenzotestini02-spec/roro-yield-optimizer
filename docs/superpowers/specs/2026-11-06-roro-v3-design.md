@@ -275,7 +275,7 @@ Il proprietario decide dopo ogni tappa se pubblicare il nuovo link.
 - Con 90 richieste il vantaggio resta almeno 13% (oggi +14,9%).
 - Con 60 richieste non scende sotto il +5%.
 - Per raggiungerli si possono cambiare soglie e regola di decisione, non i seed di verifica.
-- **Risultato (2026-11-10):** soglie calibrate 0,6 e 0,9; sui seed 1-30 con 40, 60 e 90 richieste: 0,0% (0 persi), +6,1% (3 persi), +16,5% (0 persi). Tutti e tre i criteri rispettati. Il test del valore atteso è negativo (punteggio medio −29.462 contro 43.790, 3,5 s contro 1,4 s per verdetto): resta la regola a futuri campionati.
+- **Risultato (2026-11-10):** soglia di rifiuto calibrata a 0,9 (quella di accettazione, 0,6, non incide nel piano automatico e non è stata verificata); sui seed 1-30 con 40, 60 e 90 richieste: 0,0% (0 persi), +6,1% (3 persi), +16,5% (0 persi). Tutti e tre i criteri rispettati. Il test del valore atteso, corretto dopo la revisione (limite 1/K per prenotazione, non per zona), dà un punteggio quasi uguale (43.829 contro 43.790, accordo 81%) ma è 4 volte più lento (7,5 s contro 1,9 s per verdetto): resta la regola a futuri campionati.
 - Se i criteri non si raggiungono dopo la calibrazione, la tappa 3 non si blocca: si pubblicano i numeri reali, si indica il limite e il proprietario decide se rilasciare.
 
 **Tabella della tappa 0.** Sul ponte 5 × 120 m: domanda bassa, normale e alta corrispondono a 35, 50 e 60 richieste, circa 0,75, 1,08 e 1,30 volte lo spazio. Gli altri parametri restano quelli di `ScenarioParams`.
