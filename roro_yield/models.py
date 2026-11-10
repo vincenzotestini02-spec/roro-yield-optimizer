@@ -147,6 +147,19 @@ class Vessel:
         return tuple(Slot(lane.id, z) for lane in self.lanes for z in range(ZONES))
 
 
+def customer_key(name: str) -> str:
+    """Customer names match without case or surrounding spaces."""
+    return name.strip().lower()
+
+
+@dataclass(frozen=True)
+class Reservation:
+    """Deck metres held for one customer on the whole ship, until the planner releases them."""
+
+    customer: str
+    metres: float
+
+
 @dataclass(frozen=True)
 class Scenario:
     vessel: Vessel

@@ -5,7 +5,9 @@
 
 from __future__ import annotations
 
-from .models import ZONES, Booking, Plan, Scenario, Slot, Vessel
+from typing import Sequence
+
+from .models import ZONES, Booking, Plan, Reservation, Scenario, Slot, Vessel, customer_key
 from .stability import (
     Ballast,
     ballast_fits,
@@ -21,8 +23,11 @@ EPS = 1e-9
 class DeckState:
     """Tracks remaining zone length, weight, plugs and the heel/trim moments as units are loaded."""
 
-    def __init__(self, vessel: Vessel):
+    def __init__(self, vessel: Vessel, reservations: Sequence[Reservation] = ()):
         self.vessel = vessel
+        self.reservations = tuple(reservations)
+        self._quota = {customer_key(r.customer): r.metres for r in self.reservations}
+        self.used_by_customer: dict[str, float] = {}
         self.remaining_m: dict[Slot, float] = {
             Slot(lane.id, z): vessel.zone_capacity_m(lane) for lane in vessel.lanes for z in range(ZONES)
         }
@@ -57,6 +62,9 @@ class DeckState:
     def copy(self) -> "DeckState":
         other = DeckState.__new__(DeckState)
         other.vessel = self.vessel
+        other.reservations = self.reservations
+        other._quota = self._quota
+        other.used_by_customer = dict(self.used_by_customer)
         other.remaining_m = dict(self.remaining_m)
         other.loads = dict(self.loads)
         other.weight_t = self.weight_t
@@ -65,6 +73,43 @@ class DeckState:
         other._m_l = self._m_l
         other._lane_order = self._lane_order
         return other
+
+    # ---- reservations --------------------------------------------------
+    @property
+    def capacity_m(self) -> float:
+        return sum(self.vessel.zone_capacity_m(lane) * ZONES for lane in self.vessel.lanes)
+
+    @property
+    def used_m(self) -> float:
+        return self.capacity_m - sum(self.remaining_m.values())
+
+    def _left(self, key: str) -> float:
+        return max(0.0, self._quota.get(key, 0.0) - self.used_by_customer.get(key, 0.0))
+
+    def reserved_left(self, customer: str | None = None) -> float:
+        """Reserved metres not used yet, for every customer except `customer`."""
+        skip = None if customer is None else customer_key(customer)
+        return sum(self._left(k) for k in self._quota if k != skip)
+
+    def _reservations_allow(self, b: Booking) -> bool:
+        if not self._quota:
+            return True
+        key = customer_key(b.customer)
+        length = b.effective_length(self.vessel.lashing_gap_m)
+        own_after = max(0.0, self._left(key) - length) if key in self._quota else 0.0
+        return self.used_m + length + self.reserved_left(b.customer) + own_after <= self.capacity_m + EPS
+
+    def _reserved_for(self, b: Booking) -> str:
+        key = customer_key(b.customer)
+        others = [r for r in self.reservations if customer_key(r.customer) != key]
+        return max(others, key=lambda r: self._left(customer_key(r.customer))).customer.strip()
+
+    def reservation_status(self) -> list[dict]:
+        out = []
+        for r in self.reservations:
+            used = min(r.metres, self.used_by_customer.get(customer_key(r.customer), 0.0))
+            out.append({"customer": r.customer.strip(), "metres": r.metres, "used": used, "left": r.metres - used})
+        return out
 
     # ---- feasibility ---------------------------------------------------
     def _ballast_if(self, b: Booking, slot: Slot) -> Ballast:
@@ -86,6 +131,8 @@ class DeckState:
 
     def feasible_slots(self, b: Booking) -> list[Slot]:
         if b.is_reefer and self.plugs_used >= self.vessel.reefer_plugs:
+            return []
+        if not self._reservations_allow(b):
             return []
         if self.weight_t + b.weight_t > self.vessel.max_dwt_t + EPS:
             return []
@@ -115,6 +162,8 @@ class DeckState:
         space = self._space_slots(b)
         if not space:
             return "no lane has enough space left"
+        if not self._reservations_allow(b):
+            return f"space is reserved for {self._reserved_for(b)}"
         if b.is_reefer and self.plugs_used >= vessel.reefer_plugs:
             return "no reefer plug available"
         if self.weight_t + b.weight_t > vessel.max_dwt_t + EPS:
@@ -140,6 +189,8 @@ class DeckState:
         self._m_t += b.weight_t * lane.y_m
         self._m_l += b.weight_t * lane.zone_x_m(slot.zone)
         self.loads[b.id] = (b, slot)
+        key = customer_key(b.customer)
+        self.used_by_customer[key] = self.used_by_customer.get(key, 0.0) + b.effective_length(self.vessel.lashing_gap_m)
         return slot
 
     def remove(self, booking_id: str) -> tuple[Booking, Slot]:
@@ -151,6 +202,8 @@ class DeckState:
         self.plugs_used -= int(b.is_reefer)
         self._m_t -= b.weight_t * lane.y_m
         self._m_l -= b.weight_t * lane.zone_x_m(slot.zone)
+        key = customer_key(b.customer)
+        self.used_by_customer[key] = self.used_by_customer.get(key, 0.0) - b.effective_length(self.vessel.lashing_gap_m)
         return b, slot
 
 
